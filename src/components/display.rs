@@ -327,13 +327,21 @@ impl TimelineEvent {
 pub struct Timeline {
     id: ElementId,
     events: Vec<TimelineEvent>,
+    time_width: Pixels,
 }
 
 pub fn timeline(id: impl Into<ElementId>) -> Timeline {
-    Timeline { id: id.into(), events: Vec::new() }
+    Timeline { id: id.into(), events: Vec::new(), time_width: px(48.) }
 }
 
 impl Timeline {
+    /// Width of the time column (default 48px, enough for `12:04`). Widen it
+    /// for dates: `px(80.)` fits `2026-10-05`.
+    pub fn time_width(mut self, width: Pixels) -> Self {
+        self.time_width = width;
+        self
+    }
+
     pub fn event(mut self, event: TimelineEvent) -> Self {
         self.events.push(event);
         self
@@ -371,7 +379,7 @@ impl RenderOnce for Timeline {
                     .flex()
                     .flex_row()
                     .gap_3()
-                    .child(div().w(px(48.)).flex_none().pt(px(2.)).body(text::XS).text_color(hsla(p.fg_faint)).child(e.time))
+                    .child(div().w(self.time_width).flex_none().pt(px(2.)).whitespace_nowrap().body(text::XS).text_color(hsla(p.fg_faint)).child(e.time))
                     .child(
                         // The rail: a marker, then a line down to the next one.
                         div()

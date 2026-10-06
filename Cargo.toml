@@ -66,3 +66,9 @@ name = "app_settings"
 
 [[example]]
 name = "app_explorer"
+
+[[example]]
+name = "app_console"
+
+[[example]]
+name = "app_wizard"

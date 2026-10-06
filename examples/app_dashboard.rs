@@ -280,7 +280,7 @@ impl Render for Dashboard {
                 .child(title_bar("Pulse"))
                 .child(div().flex().flex_row().flex_1().min_h_0().child(nav).child(div().flex().flex_col().flex_1().min_w_0().child(bar).child(body)))
                 .child(drawer_el)
-                .child(status_bar().left("LIVE").left(format!("TICK {}", self.data.tick)).right(format!("{}FPS", motion::fps())).right(p.name.to_uppercase())),
+                .child(status_bar().left("LIVE").left_live(format!("TICK {}", self.data.tick)).right(format!("{}FPS", motion::fps())).right(p.name.to_uppercase())),
         ))
     }
 }

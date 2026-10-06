@@ -196,10 +196,16 @@ pub fn rule(label: Option<&str>, window: &Window, cx: &App) -> impl IntoElement 
 // ── Status bar ────────────────────────────────────────────────────────────
 
 /// The bottom bar. Segments are separated by `│` in the faint ink.
+///
+/// A segment decrypts into place when its text changes — right for status
+/// that changes as *events* (`READY` → `SAVED`). For values that tick
+/// continuously (a line count, a clock, a frame rate) use [`StatusBar::left_live`]
+/// / [`StatusBar::right_live`]: they update instantly, so a busy counter
+/// doesn't keep the window animating (DESIGN_LANGUAGE §6.3).
 #[derive(IntoElement)]
 pub struct StatusBar {
-    left: Vec<SharedString>,
-    right: Vec<SharedString>,
+    left: Vec<(SharedString, bool)>,
+    right: Vec<(SharedString, bool)>,
 }
 
 pub fn status_bar() -> StatusBar {
@@ -208,12 +214,24 @@ pub fn status_bar() -> StatusBar {
 
 impl StatusBar {
     pub fn left(mut self, segment: impl Into<SharedString>) -> Self {
-        self.left.push(segment.into());
+        self.left.push((segment.into(), true));
         self
     }
 
     pub fn right(mut self, segment: impl Into<SharedString>) -> Self {
-        self.right.push(segment.into());
+        self.right.push((segment.into(), true));
+        self
+    }
+
+    /// A segment for live data: no decrypt on change.
+    pub fn left_live(mut self, segment: impl Into<SharedString>) -> Self {
+        self.left.push((segment.into(), false));
+        self
+    }
+
+    /// A segment for live data: no decrypt on change.
+    pub fn right_live(mut self, segment: impl Into<SharedString>) -> Self {
+        self.right.push((segment.into(), false));
         self
     }
 }
@@ -222,14 +240,19 @@ impl RenderOnce for StatusBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
         // Each segment decrypts into place whenever its text changes.
-        let segments = |side: &str, items: Vec<SharedString>, window: &mut Window, cx: &mut App| {
+        let segments = |side: &str, items: Vec<(SharedString, bool)>, window: &mut Window, cx: &mut App| {
             let mut row = div().flex().flex_row().items_center().gap_2();
-            for (i, item) in items.into_iter().enumerate() {
+            for (i, (item, decrypts)) in items.into_iter().enumerate() {
                 if i > 0 {
                     row = row.child(div().display(Scale::X1, window).text_color(hsla(p.fg_faint)).child("│"));
                 }
-                let t = crate::animate::play_on_change(gpui::ElementId::Name(format!("status-{side}-{i}").into()), &item, crate::motion::BASE, window, cx);
-                row = row.child(div().display(Scale::X1, window).child(crate::animate::scramble(&item, t)));
+                let shown = if decrypts {
+                    let t = crate::animate::play_on_change(gpui::ElementId::Name(format!("status-{side}-{i}").into()), &item, crate::motion::BASE, window, cx);
+                    crate::animate::scramble(&item, t)
+                } else {
+                    item.to_string()
+                };
+                row = row.child(div().display(Scale::X1, window).child(shown));
             }
             row
         };
