@@ -7,6 +7,8 @@
 
 pub mod button;
 pub mod list;
+pub mod menu;
+pub mod overlay;
 pub mod tabs;
 pub mod tag;
 pub mod ticker;
@@ -15,6 +17,8 @@ pub mod tooltip;
 
 pub use button::Button;
 pub use list::{ListItem, list_item};
+pub use menu::{Menu, MenuItem, context_menu, dropdown_menu, menu_item};
+pub use overlay::{Align, Popover, popover};
 pub use tabs::{Tabs, tabs};
 pub use tag::{Meter, Tag, meter, tag};
 pub use toggle::{Switch, Toggle, checkbox, radio, switch};

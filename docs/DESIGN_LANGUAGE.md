@@ -132,7 +132,18 @@ already includes its leading.
 - Numbers are right-aligned and fixed-width (`{:>3}%`).
 - Glyph coverage of the display face is CP437 + WGL4: box drawing, shades
   `░▒▓█▀▄▌▐`, arrows. It has **no** eighth blocks `▁▂▃` or quadrants `▖▘`;
-  set those (e.g. `ascii::sparkline`) in BODY.
+  set those (e.g. `ascii::sparkline`) in BODY. Check any symbol with
+  `fonts::display_has`.
+
+### 3.3 Icons
+
+Symbols are **pixel icons** (`src/icon.rs`), not font glyphs: 16×16 one-bit
+bitmaps drawn with the display face's own stroke (2px stems, 1px margin),
+rasterised at the same whole-pixel multiple as display type so they share
+its grid, and cached like dither. 21 ship: `plus close check play stop
+pause refresh search up down chevron_down chevron_right menu more copy
+trash file folder warning dot sliders`. Inside fixed-height controls use
+`icon(..).fit(max)`.
 
 ---
 
@@ -253,8 +264,9 @@ The control grammar, in one place:
 | busy | ASCII spinner replaces the glyph; size never changes |
 | checked | `[x]` / `(•)` in amber; `[-]` mixed |
 | selected row / tab | 2px amber edge + `accent_dim` wash / open bottom |
-| icons | characters: `▶ ■ ↑ ↻ + × » ●` (CP437/WGL4) |
+| icons | 16×16 pixel `Icon`s on the type grid; text glyphs only if `display_has` |
 | keyboard focus | 1px amber frame, keyboard-only (`focus_visible`) |
+| floating surface | `raised` fill, 1px `line_strong` frame, hard 4px dithered drop shadow |
 
 Conventions for any component, ours or wrapped:
 

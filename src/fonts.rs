@@ -45,6 +45,59 @@ pub fn register(cx: &App) -> anyhow::Result<()> {
     ])
 }
 
+/// Whether the display face has a glyph for `c`. Anything it lacks is drawn
+/// by gpui in a fallback system font — wrong weight, size and baseline.
+/// Use an [`crate::Icon`] instead of an out-of-coverage symbol.
+pub fn display_has(c: char) -> bool {
+    use std::sync::OnceLock;
+    static COVERAGE: OnceLock<Vec<(u32, u32, i32, u32)>> = OnceLock::new();
+    let segments = COVERAGE.get_or_init(|| cmap4_segments(PXPLUS_VGA).unwrap_or_default());
+    let code = c as u32;
+    segments.iter().any(|&(start, end, delta, range_offset)| {
+        // Format-4 segments with an idRangeOffset map through a glyph array;
+        // PxPlus uses plain deltas, and any segment that covers the code
+        // point and isn't the 0xFFFF sentinel maps to a real glyph.
+        start <= code && code <= end && code != 0xFFFF && (range_offset != 0 || (code as i32 + delta) & 0xFFFF != 0)
+    })
+}
+
+/// Parse the (start, end, idDelta, idRangeOffset) segments of a TrueType
+/// `cmap` format-4 subtable — just enough to answer "is this code point
+/// covered".
+fn cmap4_segments(font: &[u8]) -> Option<Vec<(u32, u32, i32, u32)>> {
+    let u16_at = |o: usize| -> Option<u32> { Some(u16::from_be_bytes([*font.get(o)?, *font.get(o + 1)?]) as u32) };
+    let u32_at = |o: usize| -> Option<usize> {
+        Some(u32::from_be_bytes([*font.get(o)?, *font.get(o + 1)?, *font.get(o + 2)?, *font.get(o + 3)?]) as usize)
+    };
+    let tables = u16_at(4)? as usize;
+    let cmap = (0..tables).find_map(|i| {
+        let rec = 12 + 16 * i;
+        (font.get(rec..rec + 4)? == b"cmap").then(|| u32_at(rec + 8)).flatten()
+    })?;
+    let subtables = u16_at(cmap + 2)? as usize;
+    let sub = (0..subtables).find_map(|i| {
+        let rec = cmap + 4 + 8 * i;
+        let (platform, encoding) = (u16_at(rec)?, u16_at(rec + 2)?);
+        let off = cmap + u32_at(rec + 4)?;
+        (u16_at(off)? == 4 && (platform == 3 && encoding == 1 || platform == 0)).then_some(off)
+    })?;
+    let seg_count = (u16_at(sub + 6)? / 2) as usize;
+    let ends = sub + 14;
+    let starts = ends + 2 * seg_count + 2;
+    let deltas = starts + 2 * seg_count;
+    let offsets = deltas + 2 * seg_count;
+    (0..seg_count)
+        .map(|i| {
+            Some((
+                u16_at(starts + 2 * i)?,
+                u16_at(ends + 2 * i)?,
+                u16_at(deltas + 2 * i)? as u16 as i16 as i32,
+                u16_at(offsets + 2 * i)?,
+            ))
+        })
+        .collect()
+}
+
 /// How big a piece of display type is, in cells: 1× = 16px, 2× = 32px, …
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scale {
@@ -84,3 +137,39 @@ pub trait FerriteText: Styled + Sized {
 }
 
 impl<T: Styled + Sized> FerriteText for T {}
+
+#[cfg(test)]
+mod tests {
+    use super::display_has;
+
+    #[test]
+    fn coverage_parser_sees_the_basics() {
+        for c in "AZaz09[]()".chars() {
+            assert!(display_has(c), "{c:?} should be covered");
+        }
+        // Known holes: these must be icons, not text.
+        for c in ['↻', '▶', '▸', '⚙'] {
+            assert!(!display_has(c), "{c:?} unexpectedly covered");
+        }
+    }
+
+    #[test]
+    fn every_glyph_ferrite_sets_in_the_display_face_exists() {
+        // Every character Ferrite's own components render in DISPLAY. If you
+        // add one, add it here; if this fails, use an Icon instead.
+        let used = concat!(
+            "[ ]x-•()",          // checkbox / radio marks
+            "█",                 // cursor
+            "▓▒░",               // title-bar mark
+            "│─",                // status bar, rules
+            "_□▫x",              // window controls
+            "|/-\\",           // spinner
+            " ░▒▓█",             // ascii::RAMP
+            "─│┌┐└┘═║",          // ascii::boxes
+            "·",                 // ascii::bar
+            "»×■●↑",             // glyphs used in the examples
+        );
+        let missing: String = used.chars().filter(|c| !display_has(*c)).collect();
+        assert!(missing.is_empty(), "display face lacks: {missing:?}");
+    }
+}

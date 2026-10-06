@@ -32,11 +32,14 @@ pub mod chrome;
 pub mod components;
 pub mod dither;
 pub mod fonts;
+pub mod icon;
 pub mod motion;
+mod raster;
 pub mod theme;
 pub mod tokens;
 
 pub use fonts::{FerriteText, Scale};
+pub use icon::{Icon, icon};
 pub use theme::{Appearance, palette};
 pub use tokens::{IRON, PAPER, Palette};
 

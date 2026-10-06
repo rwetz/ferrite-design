@@ -142,6 +142,10 @@ When scripting a Ferrite app for screenshots or interaction tests on Windows:
   gpui handles posted input normally.
 - Make the script DPI-aware (`SetProcessDPIAware`) or every coordinate is
   scaled at 125%/150%.
+- **Wheel:** `PostMessage(WM_MOUSEWHEEL)` is unreliable; `SendMessage` it
+  (lParam = *screen* coordinates). Clicks and keys post fine.
+- **PowerShell:** don't name a helper `Move` — the built-in `move` alias
+  (`Move-Item`) wins over your function and tries to move files.
 - Launch debug builds from a shell, not `Start-Process`: debug binaries are
   console-subsystem (§18) and the console window lands on top.
 
@@ -209,3 +213,38 @@ A focus handle created in `render` is a new handle every frame, so focus is
 lost on every redraw. Store it with
 `window.use_keyed_state(id, cx, |_, cx| cx.focus_handle())`, as every Ferrite
 component does; it lives exactly as long as the element keeps rendering.
+
+## 22. Symbols outside the display face silently fall back — ✅ tripwire
+
+PxPlus IBM VGA covers CP437 + WGL4 only. Anything else — `↻ ▶ ▸ ⚙ ✓` — is
+drawn by gpui in a fallback system font with the wrong weight, size and
+baseline, and nothing warns you. It looks "a lil wonky" (the first small
+refresh button).
+
+- Use a pixel [`Icon`](../src/icon.rs) for symbols. Icons share the type's
+  pixel grid and can't fall back.
+- `fonts::display_has(c)` answers whether a character is covered (it reads
+  the font's own `cmap`).
+- `fonts::tests::every_glyph_ferrite_sets_in_the_display_face_exists` lists
+  every character Ferrite sets in the display face and fails if any is
+  missing. Add to it when you add a glyph.
+
+## 23. Icons inside fixed-height controls must fit, not scale
+
+Display-scale icons snap up at fractional scale factors (X1 is 32 device px
+at 150%), which overflows a 24px button. Inside a control use
+`icon(..).fit(max)`: the largest whole multiple of 16 device px that fits.
+Icon bitmaps keep a 1px margin, so `fit` can use nearly the full inner
+height — Button uses 22px (small) / 30px (medium).
+
+## 24. Overlays: decide open/close on mouse *down*, and guard the trigger
+
+A popover's click-outside handler and its trigger both see a click on the
+trigger while open. Toggle on `on_mouse_down` and only act if the state
+still equals what this render saw (`if s.open == open`); otherwise the
+outside handler closes it and the trigger immediately reopens it. Render
+the surface with `deferred(anchored(..))` so it paints above everything
+and snaps inside the window, and move focus into it on open (or Escape and
+arrow keys never reach it). Restore focus on close only if it's still
+inside the surface.
+

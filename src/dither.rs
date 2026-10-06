@@ -22,14 +22,11 @@
 //! enough to peg a core (see PITFALLS §17). Fields are therefore plain data
 //! ([`Field`]), not closures, so they can be cache keys.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use gpui::{
-    App, Bounds, Corners, Hsla, IntoElement, Pixels, RenderImage, RenderOnce, StyleRefinement,
-    Styled, Window, canvas, point, px, size,
+    App, Bounds, Hsla, IntoElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas,
 };
+
+use crate::raster::{self, bgra};
 
 /// The 4×4 Bayer matrix. Thresholds are `(m + 0.5) / 16`.
 pub const BAYER4: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
@@ -130,63 +127,6 @@ pub fn raster(field: Field, w: u32, h: u32, cell: u32, ink_bgra: [u8; 4], paper_
     out
 }
 
-// ── The image cache ──────────────────────────────────────────────────────
-
-/// Past this many cached images the least recently used is evicted and its
-/// texture freed. Window resizes generate a new size per frame, so this has
-/// to be bounded.
-const CACHE_CAP: usize = 96;
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct Key {
-    field: [u32; 3],
-    w: u32,
-    h: u32,
-    cell: u32,
-    ink: [u8; 4],
-    paper: [u8; 4],
-}
-
-#[derive(Default)]
-struct Cache {
-    images: HashMap<Key, (Arc<RenderImage>, u64)>,
-    clock: u64,
-}
-
-thread_local! {
-    static CACHE: RefCell<Cache> = RefCell::default();
-}
-
-fn cached_image(key: Key, field: Field, window: &mut Window) -> Arc<RenderImage> {
-    let (image, evicted) = CACHE.with_borrow_mut(|cache| {
-        cache.clock += 1;
-        let now = cache.clock;
-        if let Some((image, used)) = cache.images.get_mut(&key) {
-            *used = now;
-            return (image.clone(), None);
-        }
-        let bytes = raster(field, key.w, key.h, key.cell, key.ink, key.paper);
-        let buffer = image::RgbaImage::from_raw(key.w, key.h, bytes).expect("raster size");
-        let image = Arc::new(RenderImage::new([image::Frame::new(buffer)]));
-        cache.images.insert(key, (image.clone(), now));
-        let evicted = (cache.images.len() > CACHE_CAP).then(|| {
-            let oldest = *cache.images.iter().min_by_key(|(_, (_, used))| *used).unwrap().0;
-            cache.images.remove(&oldest).unwrap().0
-        });
-        (image, evicted)
-    });
-    if let Some(old) = evicted {
-        let _ = window.drop_image(old);
-    }
-    image
-}
-
-fn bgra(color: Hsla) -> [u8; 4] {
-    let c = color.to_rgb();
-    let b = |f: f32| (f.clamp(0.0, 1.0) * 255.0).round() as u8;
-    [b(c.b), b(c.g), b(c.r), b(c.a)]
-}
-
 // ── The element ──────────────────────────────────────────────────────────
 
 /// A dithered fill. Size it like any element (`.size_full()`, `.h(px(16.))`).
@@ -257,13 +197,9 @@ impl RenderOnce for Dither {
                 if w == 0 || h == 0 {
                     return;
                 }
-                let key = Key { field: field.key(), w, h, cell, ink, paper };
-                let image = cached_image(key, field, window);
-                let target = Bounds::new(
-                    point(px(ox / sf), px(oy / sf)),
-                    size(px(w as f32 / sf), px(h as f32 / sf)),
-                );
-                let _ = window.paint_image(target, target, Corners::default(), image, 0, false);
+                let key = raster::Key::Dither { field: field.key(), w, h, cell, ink, paper };
+                let image = raster::image(key, window, || (w, h, raster(field, w, h, cell, ink, paper)));
+                raster::paint(image, ox / sf, oy / sf, w, h, window);
             },
         );
         *element.style() = self.style;

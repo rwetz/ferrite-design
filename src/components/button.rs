@@ -31,6 +31,7 @@ use gpui::{
 };
 
 use super::ticker::spinner;
+use crate::icon::{Icon, icon};
 use super::tooltip::{kbd, tooltip};
 use crate::fonts::{FerriteText, Scale};
 use crate::theme::palette;
@@ -60,6 +61,7 @@ type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 pub struct Button {
     id: ElementId,
     label: Option<SharedString>,
+    icon: Option<Icon>,
     glyph: Option<SharedString>,
     shortcut: Option<SharedString>,
     tooltip: Option<SharedString>,
@@ -78,6 +80,7 @@ impl Button {
         Self {
             id: id.into(),
             label: None,
+            icon: None,
             glyph: None,
             shortcut: None,
             tooltip: None,
@@ -98,8 +101,17 @@ impl Button {
         self
     }
 
-    /// A leading glyph — Ferrite's icons are characters: `▶ ■ ↻ + × ≡ ⌕`.
-    /// Stick to CP437/WGL4 so the display face has it.
+    /// A leading pixel icon. Preferred over [`Button::glyph`]: icons are drawn
+    /// on the display font's grid and never fall back to a system font. With
+    /// no label, the button becomes square.
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// A leading text glyph. Only characters the display face has
+    /// (`fonts::display_has`), e.g. `» × ■ ● ↑`. Anything else falls back to
+    /// a system font and looks wrong; use [`Button::icon`].
     pub fn glyph(mut self, glyph: impl Into<SharedString>) -> Self {
         self.glyph = Some(glyph.into());
         self
@@ -219,11 +231,13 @@ impl RenderOnce for Button {
         let base = if self.selected { pressed } else { rest };
         let ghost = self.variant == Variant::Ghost;
 
-        let (height, pad_x) = match self.size {
-            Size::Small => (px(24.), px(8.)),
-            Size::Medium => (px(32.), px(12.)),
+        let (height, pad_x, icon_max) = match self.size {
+            Size::Small => (px(24.), px(8.), px(22.)),
+            Size::Medium => (px(32.), px(12.), px(30.)),
         };
         let label = self.label.as_ref().map(|l| l.to_uppercase());
+        // Icon-only buttons are exactly square.
+        let icon_only = label.is_none() && self.shortcut.is_none() && (self.icon.is_some() || self.glyph.is_some());
         let accessible_name = self.label.clone().or_else(|| self.tooltip.clone());
 
         // Ghost buttons wear their frame as text: `[ LABEL ]`. The brackets
@@ -242,16 +256,19 @@ impl RenderOnce for Button {
             .items_center()
             .gap_2()
             .display(Scale::X1, window)
-            .when(ghost && !self.selected, |el| el.child(bracket("[")))
+            .when(ghost && !self.selected && !icon_only, |el| el.child(bracket("[")))
             .map(|el| {
                 if self.loading {
                     el.child(spinner(ElementId::NamedChild(self.id.clone().into(), "spin".into())).color(hsla(base.fg)))
                 } else {
-                    el.when_some(self.glyph.clone(), |el, g| el.child(g))
+                    el.when_some(self.icon, |el, i| {
+                        el.child(icon(i).fit(icon_max).color(hsla(if self.disabled { p.fg_faint } else { base.fg })))
+                    })
+                    .when_some(self.glyph.clone(), |el, g| el.child(g))
                 }
             })
             .when_some(label, |el, l| el.child(l))
-            .when(ghost && !self.selected, |el| el.child(bracket("]")))
+            .when(ghost && !self.selected && !icon_only, |el| el.child(bracket("]")))
             .when_some(self.shortcut.clone(), |el, k| el.child(kbd(&k)));
 
         let on_click = self.on_click.clone();
@@ -270,7 +287,7 @@ impl RenderOnce for Button {
             .items_center()
             .justify_center()
             .h(height)
-            .px(if ghost { px(4.) } else { pad_x })
+            .map(|el| if icon_only { el.w(height) } else { el.px(if ghost { px(4.) } else { pad_x }) })
             .when(self.full_width, |el| el.w_full())
             .border_1()
             .map(|el| {

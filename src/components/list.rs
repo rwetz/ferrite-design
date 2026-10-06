@@ -16,6 +16,7 @@ use gpui::{
 };
 
 use crate::fonts::FerriteText;
+use crate::icon::{Icon, icon};
 use crate::theme::palette;
 use crate::tokens::{hsla, text};
 
@@ -25,6 +26,7 @@ type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 pub struct ListItem {
     id: ElementId,
     label: SharedString,
+    icon: Option<Icon>,
     glyph: Option<SharedString>,
     meta: Option<SharedString>,
     selected: bool,
@@ -33,10 +35,16 @@ pub struct ListItem {
 }
 
 pub fn list_item(id: impl Into<ElementId>, label: impl Into<SharedString>) -> ListItem {
-    ListItem { id: id.into(), label: label.into(), glyph: None, meta: None, selected: false, disabled: false, on_click: None }
+    ListItem { id: id.into(), label: label.into(), icon: None, glyph: None, meta: None, selected: false, disabled: false, on_click: None }
 }
 
 impl ListItem {
+    /// A leading pixel icon (preferred over a glyph).
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
     pub fn glyph(mut self, glyph: impl Into<SharedString>) -> Self {
         self.glyph = Some(glyph.into());
         self
@@ -95,6 +103,9 @@ impl RenderOnce for ListItem {
             })
             .when(!self.selected && !self.disabled, |el| el.hover(|s| s.bg(hsla(p.raised))))
             .when(!self.disabled, |el| el.focus_visible(|s| s.border_color(hsla(p.accent))))
+            .when_some(self.icon, |el, i| {
+                el.child(icon(i).color(hsla(if self.selected { p.accent_text } else { p.fg_dim })))
+            })
             .when_some(self.glyph, |el, g| {
                 el.child(div().w(px(14.)).text_color(hsla(if self.selected { p.accent_text } else { p.fg_dim })).child(g))
             })
