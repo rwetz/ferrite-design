@@ -19,6 +19,7 @@ pub use crate::dither::{self, dither};
 pub use crate::fonts::{FerriteText, Scale, display_size};
 pub use crate::icon::{Icon, icon};
 pub use crate::motion;
+pub use crate::schemes::{self, SCHEMES, Scheme, SchemeKind};
 pub use crate::theme::{self, Appearance, palette};
 pub use crate::tokens::{hsla, hsla_a, space, text};
 

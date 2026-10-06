@@ -1703,6 +1703,15 @@ impl Render for Components {
                         .flex_col()
                         .p(space::ROW)
                         .gap(space::ROW)
+                        .child(div().flex().flex_row().items_center().gap_3()
+                            .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child("SCHEME"))
+                            .child(
+                                ferrite_design::SCHEMES.iter().fold(select("scheme"), |s, sc| s.option(sc.name))
+                                    .width(px(180.))
+                                    .selected(ferrite_design::SCHEMES.iter().position(|sc| sc.key == theme::scheme(cx).key))
+                                    .on_change(|i, _, cx| theme::set_scheme(&ferrite_design::SCHEMES[*i], cx)),
+                            )
+                            .child(div().flex_1().min_w_0().body(text::SM).text_color(hsla(p.fg_dim)).child(theme::scheme(cx).about)))
                         .child(
                             tabs("pages")
                                 .tab(PAGES[0])
@@ -1748,7 +1757,7 @@ impl Render for Components {
                     .child(
                         status_bar()
                             .left(self.last.clone())
-                            .left(if is_dark { "IRON" } else { "PAPER" })
+                            .left(ferrite_design::theme::palette(cx).name.to_uppercase())
                             .left(format!("MODE {}", MODES[self.mode].to_uppercase()))
                             .right(format!("CLICKS {}", self.clicks))
                             .right(format!("{}FPS", motion::fps()))
@@ -1784,6 +1793,10 @@ fn main() {
             _ => Appearance::Dark,
         };
         ferrite_design::init(appearance, cx);
+        // FERRITE_SCHEME=harbor|mono|phosphor|… starts in another color scheme.
+        if let Some(scheme) = std::env::var("FERRITE_SCHEME").ok().and_then(|k| ferrite_design::schemes::by_key(&k)) {
+            ferrite_design::theme::set_scheme(scheme, cx);
+        }
         // FERRITE_FPS=60|120|240… starts at that refresh rate (default 240).
         if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
             motion::set_fps(fps);

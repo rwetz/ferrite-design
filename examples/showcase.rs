@@ -276,7 +276,7 @@ impl Render for Showcase {
             .child(
                 status_bar()
                     .left("READY")
-                    .left(if is_dark { "IRON" } else { "PAPER" })
+                    .left(ferrite_design::theme::palette(cx).name.to_uppercase())
                     .left(ascii::bracket("native controls"))
                     .right(format!("SCALE {:.2}x", window.scale_factor()))
                     .right(format!("{}FPS · {:.1}MS/FRAME", motion::fps(), motion::frame().as_secs_f32() * 1000.)),
@@ -323,6 +323,10 @@ fn main() {
             _ => Appearance::Dark,
         };
         ferrite_design::init(appearance, cx);
+        // FERRITE_SCHEME=harbor|mono|phosphor|… starts in another color scheme.
+        if let Some(scheme) = std::env::var("FERRITE_SCHEME").ok().and_then(|k| ferrite_design::schemes::by_key(&k)) {
+            ferrite_design::theme::set_scheme(scheme, cx);
+        }
         // FERRITE_FPS=60|120|240… starts at that refresh rate (default 240).
         if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
             motion::set_fps(fps);

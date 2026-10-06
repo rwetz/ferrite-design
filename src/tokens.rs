@@ -244,6 +244,60 @@ mod tests {
     }
 
     #[test]
+    fn every_scheme_is_legible() {
+        for scheme in crate::schemes::SCHEMES {
+            assert_eq!(scheme.dark.tone, Tone::Dark, "{}: dark palette has the dark tone", scheme.name);
+            assert_eq!(scheme.light.tone, Tone::Light, "{}: light palette has the light tone", scheme.name);
+            check(scheme.dark);
+            check(scheme.light);
+        }
+    }
+
+    /// OKLCH hue and chroma of a color: perceptual, so "how different do
+    /// these two hues look" has one threshold everywhere on the wheel.
+    fn oklch(hex: u32) -> (f64, f64) {
+        let ch = |shift: u32| {
+            let c = ((hex >> shift) & 0xFF) as f64 / 255.0;
+            if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        };
+        let (r, g, b) = (ch(16), ch(8), ch(0));
+        let l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).cbrt();
+        let m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).cbrt();
+        let s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).cbrt();
+        let a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+        let bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+        (bb.atan2(a).to_degrees().rem_euclid(360.), a.hypot(bb))
+    }
+
+    #[test]
+    fn accents_never_look_like_a_status() {
+        // A LIVE tag and an OK tag must not be the same color. Any accent
+        // with real chroma keeps 15° of hue from danger, success and warning;
+        // grey accents (Mono, Graphite) are told apart by chroma instead.
+        for scheme in crate::schemes::SCHEMES {
+            for p in [scheme.dark, scheme.light] {
+                let (hue, chroma) = oklch(p.accent);
+                if chroma < 0.05 {
+                    continue;
+                }
+                for (status, label) in [(p.danger, "danger"), (p.success, "success"), (p.warning, "warning")] {
+                    let d = (hue - oklch(status).0).abs();
+                    let gap = d.min(360. - d);
+                    assert!(gap >= 15., "{}: accent is {gap:.0}° from {label}", p.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn scheme_keys_are_unique_and_found() {
+        let keys: std::collections::HashSet<_> = crate::schemes::SCHEMES.iter().map(|s| s.key).collect();
+        assert_eq!(keys.len(), crate::schemes::SCHEMES.len());
+        assert_eq!(crate::schemes::by_key("HARBOR").map(|s| s.name), Some("Harbor"));
+        assert_eq!(crate::schemes::SCHEMES[0].key, "ferrite", "the signature comes first");
+    }
+
+    #[test]
     fn accent_differs_from_nexis_coral() {
         // Nexis's brand is coral ≈ #F27A5E. Ferrite must not drift toward it.
         let coral = 0xF27A5Eu32;
