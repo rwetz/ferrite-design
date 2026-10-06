@@ -179,7 +179,7 @@ impl Render for Explorer {
                 d.child(div().body(text::LG).text_color(hsla(p.fg)).child(r.title.clone()))
                     .child(property_list().row_with("owner", div().flex().flex_row().items_center().gap_2().child(avatar(r.owner).size(px(20.))).child(r.owner)).row("status", r.status).row("updated", r.updated.iso()))
                     .child(rule(Some("activity"), window, cx))
-                    .child(timeline("activity").event(event(r.updated.iso(), format!("status → {}", r.status)).tone(Tone::Accent)).event(event(r.updated.add_days(-3).iso(), "created")))
+                    .child(timeline("activity").time_width(px(80.)).event(event(r.updated.iso(), format!("status → {}", r.status)).tone(Tone::Accent)).event(event(r.updated.add_days(-3).iso(), "created")))
             })
             .footer(Button::new("close-record").label("Close").small().shortcut("Esc").on_click(cx.listener(|this, _, _, cx| {
                 this.selected = None;
