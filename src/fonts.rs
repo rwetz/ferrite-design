@@ -172,6 +172,10 @@ mod tests {
             "…*",                // pagination gap, required-field mark
             "#%&*+=<>/\\|$@?!",  // decrypt / scramble noise
             "0123456789.-%",     // number_input, stat, chart readouts
+            "╔╗╚╝═║┌┐└┘─│",      // ascii_box single/double
+            "▀▄█",               // banner half blocks
+            " .:-=+*#%@oO",      // ascii::CLASSIC and BUBBLES art ramps
+            "·•●",               // pulse / dots spinners, gauge track
         );
         let missing: String = used.chars().filter(|c| !display_has(*c)).collect();
         assert!(missing.is_empty(), "display face lacks: {missing:?}");

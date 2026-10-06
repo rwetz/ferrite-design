@@ -37,6 +37,26 @@ window chrome, and the rules that hold them together.
 
 ![Motion, caught mid-frame: the page unrolling behind an amber scan line, a dissolve, a decrypt](docs/img/motion-midframe.png)
 
+**Forms, navigation, charts and text mode:**
+
+| ![Forms — field, select, number, date picker, calendar, accordion](docs/img/components-forms.png) | ![Navigation — sidebar, toolbar, breadcrumb, pagination, steps, alerts, avatars, timeline](docs/img/components-navigation.png) |
+| --- | --- |
+| ![Charts — stat tiles, stepped line chart, bars, heatmap, sparklines, skeletons](docs/img/components-charts.png) | ![Text mode — ascii_box, banner, gauges, spinners, ASCII art](docs/img/components-ascii.png) |
+
+**Ten color schemes** — Ferrite (amber on iron) plus four neutral and five
+wild, each a dark + light pair, all contrast- and hue-tested
+([DESIGN_LANGUAGE §2.3](docs/DESIGN_LANGUAGE.md#23-schemes)):
+
+![Neutral schemes: Ferrite, Mono, Graphite, Slate, Concrete](docs/img/schemes-neutral.png)
+![Wild schemes: Harbor, Cyanotype, Phosphor, Verdigris, Bruise](docs/img/schemes-wild.png)
+
+**App templates** — whole apps to start from (`scripts/new-app.sh`):
+
+| ![Dashboard](docs/img/app-dashboard.png) | ![Workbench](docs/img/app-workbench.png) |
+| --- | --- |
+| ![Settings](docs/img/app-settings.png) | ![Explorer](docs/img/app-explorer.png) |
+| ![Console](docs/img/app-console.png) | ![Wizard](docs/img/app-wizard.png) |
+
 ## Scope
 
 **For:** native desktop apps built on [GPUI](https://gpui.rs) (Rust,
@@ -58,16 +78,17 @@ gradients, stepped motion. The side-by-side is in
 | Module | |
 |---|---|
 | `tokens` | The Iron (dark) and Paper (light) palettes, type scale, spacing grid. Contrast is enforced by tests. |
-| `theme` | Which palette is on screen: appearance preference, switching, follow-system. |
+| `schemes` | Ten named schemes (Ferrite + Mono, Graphite, Slate, Concrete + Harbor, Cyanotype, Phosphor, Verdigris, Bruise), each dark + light. |
+| `theme` | What's on screen: scheme, appearance (dark/light/system), switching, follow-system, `apply_env` dev overrides. |
 | `fonts` | Embedded PxPlus IBM VGA 8×16 (display) + JetBrains Mono (body), and device-pixel snapping for the pixel face. |
-| `dither` | Dither as an element over fields (flat, ramp, radial) or grayscale pictures. Patterns: 4×4 Bayer (the texture), blue noise, Atkinson (pictures). Device-pixel cells, rasterised once and cached. |
-| `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
-| `motion` | Stepped motion vocabulary, blink, reduced-motion check, and the live refresh rate (`set_fps`, 12–240fps, default 240). |
-| `chrome` | Window options, square corners on Windows 11, Ferrite's own `TitleBar`, and `window_frame` (Linux resize edges). |
-| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `submenu`, `CommandPalette`, `Toaster`, `dialog`, `segmented`, `slider`, `tree`, `table`, `TextInput`, `scroll_area`, `scrollbar`, `virtual_list`, `split` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
-| `icon` | 21 pixel icons drawn on the display font's grid; they never fall back to a system font. |
-| `animate` | The motion engine: stepped, eased clips (`play`) and effects — unroll, dissolve, decrypt, typewriter, shake, count, develop, afterglow, interlace, tear, ping, seek, power-on. |
-| `fuzzy` | The palette's matcher: exact best-alignment scoring (word starts, runs, gaps) with match positions. |
+| `dither` | Dither as an element over fields or grayscale pictures: Bayer, blue noise, Atkinson. Rasterised once and cached. |
+| `ascii` | Text-mode strings: bars, gauges, spinner sets, sparklines, box edges, a 5×5 block font, ASCII art. |
+| `motion` / `animate` | The stepped motion vocabulary and the engine: keyed clips at the live refresh rate (default 240fps). |
+| `chrome` | Window options, square corners on Windows 11, `TitleBar`, `window_frame` (Linux resize edges). |
+| `components` | ~55 native components: controls, forms, overlays, navigation, data, charts, text mode, layout, 16 drop-in motion effects ([COMPONENTS.md](docs/COMPONENTS.md)). |
+| `icon` | 32 pixel icons drawn on the display font's grid. |
+| `fuzzy` | The palette's matcher. |
+| `prelude` | `use ferrite_design::prelude::*;` — everything a view needs. |
 
 ## Use
 
@@ -95,9 +116,12 @@ gpui_platform::application().run(|cx: &mut App| {
 Full walkthrough: [docs/SCAFFOLDING.md](docs/SCAFFOLDING.md).
 
 ```bash
+scripts/new-app.sh ferrite-pulse dashboard         # a new app from a template
+cargo run --example components                     # every component; scheme picker at the top
+cargo run --example app_dashboard                  # …app_workbench, app_settings, app_explorer, app_console, app_wizard
+FERRITE_SCHEME=harbor cargo run --example app_console   # any example in another scheme
 cargo run --example showcase                       # every primitive, Iron
 FERRITE_APPEARANCE=light cargo run --example showcase   # Paper
-cargo run --example components                     # every native component, live
 FERRITE_FPS=60 cargo run --example components      # any example at another refresh rate
 cargo run --example minimal                        # the scaffolding guide's app
 cargo test                                         # palette/dither/input/layout tripwires
@@ -111,15 +135,19 @@ cargo test                                         # palette/dither/input/layout
 - [PITFALLS.md](docs/PITFALLS.md) — field notes; read before scaffolding.
 - [REFERENCES.md](docs/REFERENCES.md) — outside dithering and ASCII-art projects worth
   revisiting.
-- [COMPONENTS.md](docs/COMPONENTS.md) — every native component, and what each one replaced; was: the plan to
-  replace it with native Ferrite components.
+- [COMPONENTS.md](docs/COMPONENTS.md) — every component, by family, and the rules for writing one.
+- [ROADMAP.md](docs/ROADMAP.md) — what "end to end" still needs, in order.
+- [AGENTS.md](AGENTS.md) — for coding agents (and people): templates by app type, the rules, an
+  exact API cheat sheet, verification. Claude Code gets a `ferrite-scaffold` skill.
 
-## Components: all native
+## Platforms
 
-Every component is Ferrite's own — controls, overlays, the command palette,
-toasts, dialogs, the text input, scrollbars, virtual lists, split panes,
-trees and tables. The crate depends on gpui and nothing built on it. Status
-and the replacement log: [COMPONENTS.md](docs/COMPONENTS.md).
+Developed on macOS and Windows. Linux works as of this release — before
+it, gpui's Linux backend was compiled without a display server and every
+window silently opened headless (PITFALLS §44). Linux builds need
+`libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libxcb1-dev
+libfontconfig-dev`; headless boxes can render and screenshot Ferrite with
+Xvfb + Mesa lavapipe ([AGENTS.md §5](AGENTS.md#5-verify-before-you-call-it-done)).
 
 ## License
 

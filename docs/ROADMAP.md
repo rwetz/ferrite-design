@@ -11,7 +11,7 @@ three platforms.
 | Layer | Status |
 |---|---|
 | **Language** — tokens, schemes, type, dither, ASCII, motion, chrome | ✅ Done. 10 schemes (Ferrite + 4 neutral + 5 wild), all contrast- and hue-tested. |
-| **Components** — controls, forms, overlays, navigation, data, charts, layout | ✅ ~50 components, all native (COMPONENTS.md). |
+| **Components** — controls, forms, overlays, navigation, data, charts, layout | ✅ ~55 components, all native, including a text-mode (ASCII) layer (COMPONENTS.md). |
 | **Motion** — engine + 16 drop-in effects + motion inside components | ✅ Every effect in DESIGN_LANGUAGE §6.1 is demoed on the gallery's Motion page. |
 | **Templates** — dashboard, workbench, settings, explorer, console, wizard | ✅ Compiled with the crate, so they can't rot. |
 | **Agent path** — AGENTS.md, scaffold script, Claude skill | ✅ |

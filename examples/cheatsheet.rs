@@ -63,6 +63,9 @@ impl Render for V {
             .child(develop("e10", i, dither(picture))).child(cascade_in("e11", i).flex().flex_col().children([div()])).child(power_on_in("e12", div()))
             .child(Button::new("sch").on_click(|_, window, cx| { theme::set_scheme(&SCHEMES[1], cx); let _ = schemes::by_key("mono"); theme::set_appearance(Appearance::Light, window, cx); motion::set_fps(25); }))
             .child(Button::new("ic").icon(Icon::ChevronUp)).child(icon(Icon::Lock))
+            .child(ascii_box().title("System").double().ink(hsla(p.accent)).child(div())).child(ascii_rule(Some("logs")).double())
+            .child(banner("bn", "FERRITE")).child(ascii_art(dither::Picture::from_fn(4, 4, |u, _| u)).cols(48).ramp(&ascii::BUBBLES)).child(ascii_gauge(0.42).label("cpu").cells(12))
+            .child(spinner("sp2").frames(ascii::spinners::DOTS)).child(mark()).child(ascii::gauge(0.4, 10)).child(ascii::box_edge(ascii::SINGLE, 20, true, Some("t")))
     }
 }
 fn main() {

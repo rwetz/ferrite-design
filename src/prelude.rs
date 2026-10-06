@@ -65,6 +65,7 @@ pub use crate::components::*;
 pub use crate::components::calendar::Date;
 pub use crate::components::tag::Tone;
 pub use crate::animate::{self, Edge};
+pub use crate::ascii;
 pub use crate::chrome::{self, title_bar, window_frame};
 pub use crate::dither::{self, dither};
 pub use crate::fonts::{FerriteText, Scale, display_size};

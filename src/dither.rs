@@ -208,6 +208,17 @@ impl Picture {
         Picture::new(w, h, levels)
     }
 
+    /// The picture's size in samples.
+    pub fn size(&self) -> (u32, u32) {
+        (self.w, self.h)
+    }
+
+    /// The level (0 = paper, 1 = ink) at normalised `u`, `v`, bilinear —
+    /// for rendering a picture some other way, e.g. as ASCII art.
+    pub fn sample(&self, u: f32, v: f32) -> f32 {
+        self.level(u, v)
+    }
+
     fn level(&self, u: f32, v: f32) -> f32 {
         let fx = (u * self.w as f32 - 0.5).clamp(0.0, (self.w - 1) as f32);
         let fy = (v * self.h as f32 - 0.5).clamp(0.0, (self.h - 1) as f32);

@@ -1,8 +1,12 @@
 # Scaffolding a New Ferrite App
 
-> Stand up a fresh GPUI desktop app on `ferrite-design`. The showcase
-> (`examples/showcase.rs`) is a complete working reference — when in doubt,
-> copy from it. Keep [PITFALLS.md](PITFALLS.md) open.
+> Stand up a fresh GPUI desktop app on `ferrite-design`.
+>
+> **Fastest path:** `scripts/new-app.sh ferrite-<thing> <template>` creates a
+> ready-to-run crate from one of six app templates (dashboard, workbench,
+> settings, explorer, console, wizard) or `minimal` — see
+> [AGENTS.md](../AGENTS.md#1-start-an-app). This page is the same thing by
+> hand. Keep [PITFALLS.md](PITFALLS.md) open.
 
 Placeholders: **`ferrite-myapp`** (crate / repo name), **`My App`** (display
 name). Ferrite apps are named `ferrite-<thing>`, as Nexis apps are
@@ -14,8 +18,8 @@ name). Ferrite apps are named `ferrite-<thing>`, as Nexis apps are
 
 - Rust stable (edition 2024; rustc ≥ 1.88).
 - **Windows:** MSVC build tools.
-- **Linux:** the usual gpui system deps (`libxkbcommon`, `wayland`, `vulkan`
-  loader, `fontconfig`).
+- **Linux:** `libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
+  libxcb1-dev libfontconfig-dev` and a Vulkan driver (PITFALLS §44).
 - **macOS:** Xcode command-line tools (Metal).
 
 ## Step 1 — Create the crate
@@ -113,7 +117,13 @@ ferrite-myapp/
 
 ## Step 5 — Build with the language
 
-- Frame regions with `components::panel("Name")`, not bare bordered divs.
+- `use ferrite_design::prelude::*;` — components, effects, palette, icons
+  and the gpui traits builders need, in one line.
+- Frame regions with `panel("Name")`, not bare bordered divs (or
+  `ascii_box()` for a text-mode screen — one style per screen).
+- Pick a scheme with `theme::set_scheme(..)` after `init`, or let users
+  pick one (`SCHEMES`); `theme::apply_env(cx)` honours `FERRITE_SCHEME`,
+  `FERRITE_APPEARANCE` and `FERRITE_FPS` for trying looks.
 - Display labels: `.display(Scale::X1, window)`, UPPERCASE.
 - Body: `.body(text::BASE)`; it's already the theme default for widgets.
 - Texture: `dither(..)` only in the places DESIGN_LANGUAGE §5.2 allows.

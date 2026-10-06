@@ -157,12 +157,8 @@ impl RenderOnce for TitleBar {
                     .when(IS_LINUX && client_decorated, |this| {
                         this.on_mouse_down(MouseButton::Right, |ev, window, _| window.show_window_menu(ev.position))
                     })
-                    .child(
-                        div()
-                            .display(Scale::X1, window)
-                            .text_color(hsla(p.accent))
-                            .child(crate::animate::type_on("▓▒░", boot).replace('█', "▓")),
-                    )
+                    // The mark types on cell by cell as the window boots.
+                    .child(crate::components::textmode::mark().shown(if boot.done { 3 } else { (boot.t * 3.).round() as usize + 1 }))
                     .child(
                         div()
                             .display(Scale::X1, window)
