@@ -23,6 +23,8 @@ use ferrite_design::components::{Button, switch, tag};
 
 struct Showcase {
     tick: u64,
+    /// Built once: the pattern comparison dithers it every frame from cache.
+    sphere: dither::Picture,
     _appearance: Subscription,
 }
 
@@ -44,7 +46,7 @@ impl Showcase {
             })
             .detach();
         }
-        Self { tick: 0, _appearance: theme::follow_system(window) }
+        Self { tick: 0, sphere: dither::Picture::from_fn(300, 200, sphere_scene), _appearance: theme::follow_system(window) }
     }
 
     fn progress(&self) -> f32 {
@@ -78,6 +80,22 @@ impl Render for Showcase {
                 .flex_1()
                 .child(dither(field).ink(hsla(p.fg_dim)).h(px(48.)).w_full())
                 .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(label))
+        };
+
+        // One column of the pattern comparison: the same three sources.
+        let pattern_column = |label: &'static str, note: &'static str, pattern: dither::Pattern, window: &Window| {
+            let ink = hsla(p.accent);
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .gap_2()
+                .child(div().display(Scale::X1, window).child(label))
+                .child(dither(dither::horizontal(0.0, 1.0)).pattern(pattern).ink(ink).h(px(32.)).w_full())
+                .child(dither(dither::radial(1.0, 0.0)).pattern(pattern).ink(ink).h(px(64.)).w_full())
+                // Fixed 3:2, the picture's own aspect, so the sphere stays round.
+                .child(dither(self.sphere.clone()).pattern(pattern).ink(ink).w(px(300.)).h(px(200.)))
+                .child(div().body(text::SM).text_color(hsla(p.fg_dim)).child(note))
         };
 
         div()
@@ -217,6 +235,18 @@ impl Render for Showcase {
                                 .child(dither_sample("RADIAL", dither::radial(1.0, 0.0), window)),
                         ),
                     )
+                    // ── Dither patterns, side by side ───────────────────────
+                    .child(
+                        panel("Patterns").meta("ramp · radial · picture").child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .gap(space::ROW)
+                                .child(pattern_column("BAYER 4×4", "The texture. Default for fields.", dither::Pattern::Bayer4, window))
+                                .child(pattern_column("BLUE NOISE", "Ordered, grid-free grain.", dither::Pattern::BlueNoise, window))
+                                .child(pattern_column("ATKINSON", "Pictures only. Default for pictures.", dither::Pattern::Atkinson, window)),
+                        ),
+                    )
                     // ── Empty state ──────────────────────────────────────────
                     .child(
                         panel("Empty state").h(px(220.)).child(empty_state(
@@ -237,6 +267,35 @@ impl Render for Showcase {
                     .right(format!("{}", motion::FRAME.as_millis()) + "MS/FRAME"),
             )
     }
+}
+
+/// A lit sphere on a floor, as levels (1 = full ink): enough tone range to
+/// tell the patterns apart. The picture is 3:2, so `x` runs 0→1.5.
+fn sphere_scene(u: f32, v: f32) -> f32 {
+    let (x, y) = (u * 1.5, v);
+    // Backdrop: a dim wall, a brighter floor below the horizon.
+    let mut level = if y > 0.72 { 0.18 + (y - 0.72) * 0.8 } else { 0.10 + y * 0.12 };
+    // A soft shadow, thrown down-right by the upper-left light.
+    let (sx, sy) = ((x - 0.84) / 0.34, (y - 0.80) / 0.06);
+    let shadow = (sx * sx + sy * sy).sqrt();
+    if shadow < 1.0 {
+        level *= 0.2 + 0.8 * shadow;
+    }
+    // The ball: Lambert diffuse plus a specular glint.
+    let (nx, ny) = ((x - 0.75) / 0.3, (y - 0.44) / 0.3);
+    let d2 = nx * nx + ny * ny;
+    if d2 < 1.0 {
+        let nz = (1.0 - d2).sqrt();
+        let light = [-0.5f32, -0.6, 0.62];
+        let len = (light[0] * light[0] + light[1] * light[1] + light[2] * light[2]).sqrt();
+        let [lx, ly, lz] = light.map(|c| c / len);
+        let diffuse = (nx * lx + ny * ly + nz * lz).max(0.0);
+        let (hx, hy, hz) = (lx, ly, lz + 1.0);
+        let hlen = (hx * hx + hy * hy + hz * hz).sqrt();
+        let spec = ((nx * hx + ny * hy + nz * hz) / hlen).max(0.0).powf(28.0);
+        level = 0.03 + 0.85 * diffuse + 0.6 * spec;
+    }
+    level
 }
 
 fn main() {

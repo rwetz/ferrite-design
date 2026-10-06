@@ -178,6 +178,17 @@ would reach for those, Ferrite uses **4×4 ordered (Bayer) dither** or a
   1-px dither stays 1-px at any scale.
 - Default ink is `line_strong`; amber dither is reserved for accent uses
   (progress edges, the title-bar mark).
+- Patterns (`.pattern(..)`), compared side by side in the showcase:
+
+  | Pattern | Kind | Use |
+  |---|---|---|
+  | `Bayer4` | ordered | **the texture**; default for fields |
+  | `BlueNoise` | ordered (64×64 void-and-cluster tile) | an organic, grid-free grain where the crosshatch is too busy; as stable and steppable as Bayer |
+  | `Atkinson` | error diffusion | **pictures only** (`dither::Picture`); default for them. High contrast by design: it drops 2/8 of the error, so shadows crush and highlights blow out |
+
+  Error diffusion never goes on structural texture or anything animated:
+  each cell depends on the ones before it, so the pattern reshuffles when
+  the size changes and worms across flat fields.
 
 ### 5.2 Where texture goes — structural accents, not noise
 

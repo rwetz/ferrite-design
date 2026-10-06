@@ -15,7 +15,7 @@ use gpui::{Bounds, Corners, Hsla, Pixels, RenderImage, Window, point, px, size};
 /// What an image is, precisely enough that equal keys mean equal pixels.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Key {
-    Dither { field: [u32; 3], w: u32, h: u32, cell: u32, ink: [u8; 4], paper: [u8; 4] },
+    Dither { source: [u64; 2], pattern: crate::dither::Pattern, w: u32, h: u32, cell: u32, ink: [u8; 4], paper: [u8; 4] },
     Icon { icon: u8, scale: u32, ink: [u8; 4] },
 }
 

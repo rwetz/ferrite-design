@@ -60,7 +60,7 @@ gradients, stepped motion. The side-by-side is in
 | `tokens` | The Iron (dark) and Paper (light) palettes, type scale, spacing grid. Contrast is enforced by tests. |
 | `theme` | Which palette is on screen: appearance preference, switching, follow-system. |
 | `fonts` | Embedded PxPlus IBM VGA 8×16 (display) + JetBrains Mono (body), and device-pixel snapping for the pixel face. |
-| `dither` | 4×4 Bayer ordered dither as an element: flat, ramp, radial. Device-pixel cells, rasterised once and cached. |
+| `dither` | Dither as an element over fields (flat, ramp, radial) or grayscale pictures. Patterns: 4×4 Bayer (the texture), blue noise, Atkinson (pictures). Device-pixel cells, rasterised once and cached. |
 | `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
 | `motion` | Stepped motion vocabulary, blink, reduced-motion check. |
 | `chrome` | Window options, square corners on Windows 11, Ferrite's own `TitleBar`, and `window_frame` (Linux resize edges). |
@@ -108,6 +108,8 @@ cargo test                                         # palette/dither/input/layout
   space, texture, motion, chrome, and the family checklist.
 - [SCAFFOLDING.md](docs/SCAFFOLDING.md) — new app, step by step.
 - [PITFALLS.md](docs/PITFALLS.md) — field notes; read before scaffolding.
+- [REFERENCES.md](docs/REFERENCES.md) — outside dithering and ASCII-art projects worth
+  revisiting.
 - [COMPONENTS.md](docs/COMPONENTS.md) — every native component, and what each one replaced; was: the plan to
   replace it with native Ferrite components.
 
