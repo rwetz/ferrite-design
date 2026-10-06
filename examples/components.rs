@@ -15,8 +15,9 @@ use ferrite_design::{
     components::{
         Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
-        InputEvent, SortDir, TextInput, column, count_up, decrypt, dissolve, shake, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
+        InputEvent, SortDir, TextInput, afterglow, column, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
     },
+    dither::{self, dither},
     icon::icon,
     motion, palette, theme,
     tokens::{hsla, space, text},
@@ -74,7 +75,9 @@ struct Components {
     tick: u64,
     inputs: Vec<Entity<TextInput>>,
     name_errors: u32,
-    replay: [u32; 6],
+    replay: [u32; 13],
+    /// Built once: the develop demo's picture.
+    orb: dither::Picture,
     _input_subs: Vec<Subscription>,
     word_wrap: bool,
     show_hidden: bool,
@@ -155,7 +158,8 @@ impl Components {
             tick: 0,
             inputs,
             name_errors: 0,
-            replay: [0; 6],
+            replay: [0; 13],
+            orb: dither::Picture::from_fn(240, 160, orb_scene),
             _input_subs: input_subs,
             word_wrap: true,
             show_hidden: false,
@@ -359,15 +363,90 @@ impl Components {
             .text_color(hsla(p.accent_text))
             .child(count_up("m-count", target, |v| format!("{v:05.1}%")));
 
+        let develop_demo = develop(("m-develop", r[6] as usize), r[6], dither(self.orb.clone()).ink(hsla(p.accent)).w(px(240.)).h(px(160.)));
+        let latency = 12 + (r[7] * 37) % 180;
+        let glow_demo = div()
+            .display(Scale::X2, window)
+            .text_color(hsla(p.fg))
+            .child(afterglow("m-glow", format!("{latency:>3}MS")));
+        let interlace_demo = interlace_in(("m-interlace", r[8] as usize), r[8], {
+            div()
+                .w(px(300.))
+                .flex()
+                .flex_col()
+                .border_1()
+                .border_color(hsla(p.line_strong))
+                .bg(hsla(p.raised))
+                .children(["channel 3", "signal locked", "field 1 · even", "field 2 · odd", "picture ok"].iter().map(|l| {
+                    div().h(px(24.)).px_3().flex().items_center().body(text::SM).text_color(hsla(p.fg_dim)).child(*l)
+                }))
+        })
+        .veil(hsla(p.surface));
+        let tear_demo = {
+            let (danger, ink, scale) = (p.danger, p.bg, fonts_x1(window));
+            tear("m-tear", r[9], move || {
+                div()
+                    .px_4()
+                    .py_2()
+                    .bg(hsla(danger))
+                    .text_color(hsla(ink))
+                    .text_size(scale)
+                    .font_family(ferrite_design::fonts::DISPLAY)
+                    .child("LINK LOST · RETRYING")
+            })
+        };
+        let ping_demo = ping("m-ping", r[10], tag(format!("{} new", r[10])).accent());
+        let seek_demo = tabs("m-seek").tab("Logs").tab("Metrics").tab("Config").tab("Env").selected((r[11] % 4) as usize);
+        let power_demo = power_on_in(("m-power", r[12] as usize), {
+            div()
+                .w(px(260.))
+                .h(px(130.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(hsla(p.raised))
+                .border_1()
+                .border_color(hsla(p.line_strong))
+                .display(Scale::X2, window)
+                .text_color(hsla(p.accent_text))
+                .child("READY.")
+        });
+
+        let rates = motion::RATES;
+        let current = rates.iter().position(|&r| r == motion::fps()).unwrap_or(1);
+        let rate_picker = rates.iter().fold(segmented("fps"), |seg, r| seg.option(format!("{r}")))
+            .selected(current)
+            .on_select(move |i, _, cx| {
+                motion::set_fps(rates[*i]);
+                cx.refresh_windows();
+            });
+
         div()
             .flex()
             .flex_col()
             .gap(space::ROW)
             .child(
                 div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_3()
+                    .child(div().display(Scale::X1, window).child("REFRESH"))
+                    .child(rate_picker)
+                    .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child("FPS"))
+                    .child(
+                        div()
+                            .flex_1()
+                            .body(text::SM)
+                            .text_color(hsla(p.fg_dim))
+                            .child("Smooth effects take finer steps at higher rates; timed ones (shake, tear, ping, stamp) keep their beat. Costs CPU only while something plays."),
+                    ),
+            )
+            .child(
+                div()
                     .body(text::SM)
                     .text_color(hsla(p.fg_dim))
-                    .child("Stepped at 25fps, eased out: big bites first, then it settles. Every effect stays in its box and is over in a third of a second."),
+                    .child(format!("Stepped at {}fps, eased out: big bites first, then it settles. Every effect stays in its box and is over in a third of a second.", motion::fps())),
             )
             .child(
                 div().flex().flex_row().gap(space::ROW)
@@ -380,6 +459,24 @@ impl Components {
                     .child(tile(3, "Typewriter", "terminal print", type_demo.into_any_element()))
                     .child(tile(4, "Shake", "rejection · 6px max", shake_demo.into_any_element()))
                     .child(tile(5, "Count", "numbers roll in steps", count_demo.into_any_element())),
+            )
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(tile(6, "Develop", "blue noise, speck by speck", develop_demo.into_any_element()))
+                    .child(tile(7, "Afterglow", "old value fades like phosphor", glow_demo.into_any_element()))
+                    .child(tile(8, "Interlace", "even field, then odd", interlace_demo.into_any_element())),
+            )
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(tile(9, "Tear", "system failure · 6px max", tear_demo.into_any_element()))
+                    .child(tile(10, "Ping", "new item · one ring", ping_demo.into_any_element()))
+                    .child(tile(11, "Seek", "the tab edge travels", seek_demo.into_any_element())),
+            )
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(tile(12, "Power-on", "launch · once per window", power_demo.into_any_element()))
+                    .child(div().flex_1())
+                    .child(div().flex_1()),
             )
     }
 
@@ -1056,7 +1153,7 @@ impl Render for Components {
         let layout_page = self.layout_page(window, cx);
         let motion_page = self.motion_page(window, cx);
 
-        chrome::window_frame().child(div()
+        chrome::window_frame().child(power_on_in("power-on", div()
             .flex()
             .flex_col()
             .size_full()
@@ -1118,10 +1215,29 @@ impl Render for Components {
                             .left(if is_dark { "IRON" } else { "PAPER" })
                             .left(format!("MODE {}", MODES[self.mode].to_uppercase()))
                             .right(format!("CLICKS {}", self.clicks))
+                            .right(format!("{}FPS", motion::fps()))
                             .right(format!("SCALE {:.2}x", window.scale_factor())),
                     ),
-            ))
+            )))
     }
+}
+
+/// The display face at its crisp 1× size, for elements styled by hand.
+fn fonts_x1(window: &Window) -> gpui::Pixels {
+    ferrite_design::fonts::display_size(Scale::X1, window)
+}
+
+/// A lit orb, as levels: the develop demo's picture (3:2).
+fn orb_scene(u: f32, v: f32) -> f32 {
+    let (x, y) = (u * 1.5, v);
+    let (nx, ny) = ((x - 0.75) / 0.36, (y - 0.5) / 0.36);
+    let d2 = nx * nx + ny * ny;
+    if d2 >= 1. {
+        return 0.06 + 0.1 * v;
+    }
+    let nz = (1. - d2).sqrt();
+    let diffuse = (-0.5 * nx - 0.6 * ny + 0.62 * nz).max(0.) / 0.94;
+    0.04 + 0.9 * diffuse
 }
 
 fn main() {
@@ -1132,6 +1248,10 @@ fn main() {
             _ => Appearance::Dark,
         };
         ferrite_design::init(appearance, cx);
+        // FERRITE_FPS=60|120|240… starts at that refresh rate (default 25).
+        if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
+            motion::set_fps(fps);
+        }
         cx.bind_keys([gpui::KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
         let options = chrome::window_options("Ferrite Components", size(px(1180.), px(900.)), cx);
         cx.open_window(options, |window, cx| {

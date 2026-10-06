@@ -262,13 +262,11 @@ impl RenderOnce for Switch {
             .child(
                 div()
                     .display(Scale::X1, window)
-                    // Three display cells (a cell is half its height), so
-                    // ON/OFF never reflows the label beside it.
-                    .w(display_size(Scale::X1, window) * 1.5)
-                    // macOS: CoreText's advances overshoot by ~1e-6px, so
-                    // "OFF" shapes 24.000004px into a 24px box and wraps
-                    // (PITFALLS 43).
-                    .when(cfg!(target_os = "macos"), |el| el.whitespace_nowrap())
+                    // Four display cells (a cell is half its height): OFF
+                    // plus a cell of air, so ON/OFF never reflows the label
+                    // and never sits flush against it. Not three: text
+                    // exactly as wide as its box wraps on macOS (PITFALLS 43).
+                    .w(display_size(Scale::X1, window) * 2.)
                     .text_color(hsla(if self.disabled { p.fg_faint } else if on { p.accent_text } else { p.fg_dim }))
                     .child({
                         let text = if on { "ON" } else { "OFF" };

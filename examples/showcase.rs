@@ -1,6 +1,7 @@
 //! Every Ferrite primitive on one screen.
 //!
 //!     cargo run --example showcase
+//!     FERRITE_FPS=120 cargo run --example showcase
 
 // Release builds are GUI-subsystem on Windows: no console window behind the app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -8,7 +9,7 @@
 use ferrite_design::{
     Appearance, FerriteText, Scale, ascii,
     chrome::{self, title_bar},
-    components::{cursor, empty_state, panel, progress_bar, rule, status_bar},
+    components::{cursor, empty_state, panel, power_on_in, progress_bar, rule, segmented, status_bar},
     dither::{self, dither},
     motion, palette,
     theme,
@@ -22,7 +23,9 @@ use gpui::{
 use ferrite_design::components::{Button, switch, tag};
 
 struct Showcase {
-    tick: u64,
+    /// When the demo started: progress and spinner run on elapsed time, so
+    /// a faster refresh rate makes them smoother, never faster.
+    started: std::time::Instant,
     /// Built once: the pattern comparison dithers it every frame from cache.
     sphere: dither::Picture,
     _appearance: Subscription,
@@ -30,27 +33,28 @@ struct Showcase {
 
 impl Showcase {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Drive the progress demo and spinner at the stepped frame rate.
-        // Under reduced motion nothing ticks; the screen renders its final state.
+        // Redraw the progress demo and spinner every second live frame
+        // (`motion::frame`, which the refresh picker changes): 80ms at the
+        // default 25fps, ~8ms at 240. Under reduced motion nothing ticks;
+        // the screen renders its final state.
         if !motion::reduced(cx) {
             cx.spawn(async move |this, cx| {
                 loop {
-                    cx.background_executor().timer(motion::FRAME * 2).await;
-                    if this.update(cx, |this, cx| {
-                        this.tick += 1;
-                        cx.notify();
-                    }).is_err() {
+                    cx.background_executor().timer(motion::frame() * 2).await;
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
                         break;
                     }
                 }
             })
             .detach();
         }
-        Self { tick: 0, sphere: dither::Picture::from_fn(300, 200, sphere_scene), _appearance: theme::follow_system(window) }
+        Self { started: std::time::Instant::now(), sphere: dither::Picture::from_fn(300, 200, sphere_scene), _appearance: theme::follow_system(window) }
     }
 
+    /// A 4.8s loop, 0 → 1.
     fn progress(&self) -> f32 {
-        (self.tick % 120) as f32 / 119.0
+        const LOOP: f32 = 4.8;
+        (self.started.elapsed().as_secs_f32() % LOOP) / LOOP
     }
 }
 
@@ -59,7 +63,7 @@ impl Render for Showcase {
         let p = palette(cx);
         let value = self.progress();
         let is_dark = p.is_dark();
-        let elapsed = motion::FRAME * 2 * self.tick as u32;
+        let elapsed = self.started.elapsed();
 
         let swatch = |name: &'static str, hex: u32, window: &Window| {
             div()
@@ -98,7 +102,7 @@ impl Render for Showcase {
                 .child(div().body(text::SM).text_color(hsla(p.fg_dim)).child(note))
         };
 
-        div()
+        power_on_in("power-on", div()
             .flex()
             .flex_col()
             .size_full()
@@ -202,6 +206,17 @@ impl Render for Showcase {
                                             .child(tag("fault").danger())
                                             .child(tag("ok").success()),
                                     )
+                                    .child(rule(Some("refresh"), window, cx))
+                                    .child({
+                                        let rates = motion::RATES;
+                                        let current = rates.iter().position(|&r| r == motion::fps()).unwrap_or(1);
+                                        rates.iter().fold(segmented("fps"), |seg, r| seg.option(format!("{r}")))
+                                            .selected(current)
+                                            .on_select(move |i, _, cx| {
+                                                motion::set_fps(rates[*i]);
+                                                cx.refresh_windows();
+                                            })
+                                    })
                                     .child(rule(Some("progress"), window, cx))
                                     .child(progress_bar(value, px(16.), cx))
                                     .child(
@@ -264,8 +279,8 @@ impl Render for Showcase {
                     .left(if is_dark { "IRON" } else { "PAPER" })
                     .left(ascii::bracket("native controls"))
                     .right(format!("SCALE {:.2}x", window.scale_factor()))
-                    .right(format!("{}", motion::FRAME.as_millis()) + "MS/FRAME"),
-            )
+                    .right(format!("{}FPS · {:.1}MS/FRAME", motion::fps(), motion::frame().as_secs_f32() * 1000.)),
+            ))
     }
 }
 
@@ -308,6 +323,10 @@ fn main() {
             _ => Appearance::Dark,
         };
         ferrite_design::init(appearance, cx);
+        // FERRITE_FPS=60|120|240… starts at that refresh rate (default 25).
+        if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
+            motion::set_fps(fps);
+        }
 
         let options = chrome::window_options("Ferrite Showcase", size(px(1080.), px(860.)), cx);
         cx.open_window(options, |window, cx| {

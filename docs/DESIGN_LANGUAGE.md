@@ -227,7 +227,8 @@ contained.**
 | Token | Value | Use |
 |---|---|---|
 | — | instant | hover, select, focus — anything the pointer does continuously |
-| `motion::FRAME` | 40ms | one step (25fps) |
+| `motion::FRAME` | 40ms | one step at the default 25fps; the fixed beat for table effects |
+| `motion::frame()` | 40ms default · 4.2–83ms | the live step for smooth effects; `motion::set_fps` (12/25/30/60/120/240) |
 | `motion::FAST` | 120ms · 3 frames | menus, popovers, switch thumbs |
 | `motion::BASE` | 200ms · 5 frames | modals, pages, tab bars, decrypts |
 | `motion::SLOW` | 320ms · 8 frames | shakes, number rolls, large unrolls |
@@ -252,8 +253,33 @@ contained.**
 | **sweep** | the selection wash fills left→right behind the row; the amber bar lands at once | list items, table rows, tree rows |
 | **cascade** | items decrypt in one frame apart (max 8) | tree branches opening |
 | **boot** | a header's title decrypts while its dither rule draws on | every panel and the title bar, on first appearance |
+| **develop** | a blue-noise veil thins speck by speck, 64 levels | pictures and art arriving (`develop`) |
+| **afterglow** | the old value lingers under the new one: amber, then dim, then gone | values that change as events (`afterglow`) |
+| **interlace** | even rows sweep down, then the odd rows fill in | page and panel switches, heavier than unroll (`interlace_in`) |
+| **tear** | three horizontal bands jolt sideways for three frames, 6px max | system failures — shake is for *input* errors (`tear`) |
+| **ping** | a square dither ring steps out 8px, ▓ → ▒ → ░ | a new item arriving at a marker (`ping`) |
+| **seek** | the active edge steps from the old tab to the new one, resizing | tab strips |
+| **power-on** | an amber line draws out from the centre, then the picture opens vertically | the app's first window, once (`power_on_in`) |
 
-### 6.2 Rules
+### 6.2 Refresh rate
+
+Apps can raise the step rate with `motion::set_fps` (the examples take
+`FERRITE_FPS` and have a REFRESH picker). It changes how *finely* an
+effect steps, never how long it lasts:
+
+- **Smooth effects** (unroll, dissolve, travel, grow, develop, interlace,
+  power-on, seek, and anything on `p.t` / `p.eased()`) take more, smaller
+  steps.
+- **Table effects** (shake, tear, ping, stamp, toast step-in, decrypt
+  churn) index a keyframe table by `p.frame`, which counts fixed 40ms
+  beats at any rate — so their timing never changes.
+- Cost is per redraw: an idle window still does no work, but anything
+  playing redraws at the chosen rate (the showcase's always-running
+  progress demo, which steps every second frame: ~9% of a core at 25fps,
+  ~19% at 60 on an M-series Mac).
+  Above the display's own refresh, extra frames are never seen.
+
+### 6.3 Rules
 
 - **Entrances animate; exits don't.** Closing is instant — the user has
   already moved on.

@@ -27,7 +27,9 @@ pub mod tooltip;
 
 pub use button::Button;
 pub use dialog::{Dialog, dialog};
-pub use fx::{count_up, decrypt, dissolve, shake, typewriter, unroll_in};
+pub use fx::{
+    afterglow, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in,
+};
 pub use input::{InputEvent, TextInput};
 pub use list::{ListItem, list_item};
 pub use menu::{Menu, MenuItem, Submenu, context_menu, dropdown_menu, menu_item, submenu};

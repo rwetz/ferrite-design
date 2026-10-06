@@ -4,7 +4,8 @@
 //! Ferrite motion is **jerky yet smooth, bold yet contained**:
 //!
 //! - **Jerky:** every animation advances in whole frames at
-//!   [`motion::FRAME`] (25fps). Nothing glides; you can count the steps.
+//!   [`motion::frame`] (25fps by default; apps can raise it). Nothing
+//!   glides; you can count the steps.
 //! - **Smooth:** the steps follow an ease-out ([`snap`]), so the first
 //!   frames take big bites and the last ones settle — a steady cadence that
 //!   reads as fluid, not broken.
@@ -17,8 +18,10 @@
 //! The engine is [`play`] / [`play_on_change`]: keyed, timer-driven progress
 //! that re-renders the calling view once per frame while running. The
 //! effects are plain functions of that progress ([`scramble`], [`type_on`],
-//! [`shake_offset`], [`dissolve_level`]) and two elements that need paint
-//! access ([`Unroll`], [`Nudge`]).
+//! [`shake_offset`], [`dissolve_level`], [`develop_level`],
+//! [`interlace_fields`], [`tear_bands`], [`ping_ring`], [`power_on_band`])
+//! and the elements that need paint access ([`Unroll`], [`Nudge`],
+//! [`Interlace`], [`Band`], [`PowerOn`]).
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
@@ -39,16 +42,24 @@ pub fn snap(t: f32) -> f32 {
     1. - (1. - t).powi(3)
 }
 
-/// Number of whole frames in `duration` (at least one).
+/// Number of whole frames in `duration` (at least one), at the live rate.
 pub fn frames(duration: Duration) -> u32 {
-    ((duration.as_secs_f32() / motion::FRAME.as_secs_f32()).round() as u32).max(1)
+    frames_at(duration, motion::frame())
 }
 
-/// Linear progress quantised to whole frames: 0, 1/n, 2/n … 1.
+/// Linear progress quantised to whole frames at the live rate: 0, 1/n … 1.
 pub fn quantise(elapsed: Duration, duration: Duration) -> f32 {
-    let n = frames(duration);
-    let frame = (elapsed.as_secs_f32() / motion::FRAME.as_secs_f32()).floor() as u32;
-    (frame.min(n) as f32) / n as f32
+    quantise_at(elapsed, duration, motion::frame())
+}
+
+fn frames_at(duration: Duration, frame: Duration) -> u32 {
+    ((duration.as_secs_f32() / frame.as_secs_f32()).round() as u32).max(1)
+}
+
+fn quantise_at(elapsed: Duration, duration: Duration, frame: Duration) -> f32 {
+    let n = frames_at(duration, frame);
+    let step = (elapsed.as_secs_f32() / frame.as_secs_f32()).floor() as u32;
+    (step.min(n) as f32) / n as f32
 }
 
 // ── The engine ────────────────────────────────────────────────────────────
@@ -58,7 +69,9 @@ pub fn quantise(elapsed: Duration, duration: Duration) -> f32 {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Progress {
     pub t: f32,
-    /// Which frame this is (0-based) — for effects that index tables.
+    /// Which 40ms beat ([`motion::FRAME`]) this is, 0-based — for effects
+    /// that index tables (shake, stamp, noise). Fixed at any refresh rate, so
+    /// a table's timing never changes; only `t` gets finer.
     pub frame: u32,
     pub done: bool,
 }
@@ -96,7 +109,7 @@ fn progress(clip: &Clip) -> Progress {
 fn run(cx: &mut gpui::Context<Clip>) -> Task<()> {
     cx.spawn(async move |this, cx| {
         loop {
-            cx.background_executor().timer(motion::FRAME).await;
+            cx.background_executor().timer(motion::frame()).await;
             let done = this.update(cx, |clip, cx| {
                 cx.notify();
                 // Done only once the delay has passed too.
@@ -222,6 +235,56 @@ pub fn count(from: f32, to: f32, p: Progress) -> f32 {
     from + (to - from) * p.eased()
 }
 
+/// Veil level for a develop: full cover → clear over the blue-noise tile, so
+/// the content arrives speck by speck. Snapped to 64ths: finer than Bayer's
+/// 16, but bounded, so a develop at 240fps can't flood the raster cache.
+pub fn develop_level(p: Progress) -> f32 {
+    ((1. - p.eased()) * 64.).round() / 64.
+}
+
+/// How far each interlaced field has been drawn, top to bottom, as
+/// `(even, odd)`: the even rows in the first half, the odd rows in the second.
+pub fn interlace_fields(p: Progress) -> (f32, f32) {
+    if p.done {
+        return (1., 1.);
+    }
+    if p.t < 0.5 { (snap(p.t * 2.), 0.) } else { (1., snap((p.t - 0.5) * 2.)) }
+}
+
+/// A tear: three horizontal bands of an element jolted sideways, one table
+/// row per frame, then whole again. Each band is `(from, to, dx)`: fractions
+/// of the height and a pixel offset. Never beyond 6px, like a shake.
+pub fn tear_bands(p: Progress) -> Option<[(f32, f32, f32); 3]> {
+    const TABLE: [[(f32, f32, f32); 3]; 3] = [
+        [(0., 0.30, 0.), (0.30, 0.55, 6.), (0.55, 1., -3.)],
+        [(0., 0.45, -4.), (0.45, 0.70, 0.), (0.70, 1., 5.)],
+        [(0., 0.20, 0.), (0.20, 0.80, 2.), (0.80, 1., 0.)],
+    ];
+    if p.done { None } else { TABLE.get(p.frame as usize).copied() }
+}
+
+/// A ping: a square dither ring stepping outward from its element and
+/// thinning ▓ → ▒ → ░, one step per frame. `(spread, level)`.
+pub fn ping_ring(p: Progress) -> Option<(Pixels, f32)> {
+    use crate::dither::level;
+    const STEPS: [(f32, f32); 3] = [(2., level::DARK), (5., level::MEDIUM), (8., level::LIGHT)];
+    if p.done {
+        return None;
+    }
+    STEPS.get(p.frame as usize).map(|&(spread, level)| (px(spread), level))
+}
+
+/// Power-on: the visible band as `(width, height)` fractions. A line draws
+/// out from the centre, then the picture opens vertically from it — a CRT
+/// warming up.
+pub fn power_on_band(p: Progress) -> (f32, f32) {
+    const SPLIT: f32 = 0.35;
+    if p.done {
+        return (1., 1.);
+    }
+    if p.t < SPLIT { (snap(p.t / SPLIT), 0.) } else { (1., snap((p.t - SPLIT) / (1. - SPLIT))) }
+}
+
 // ── Elements ──────────────────────────────────────────────────────────────
 
 /// Reveals its child top-to-bottom like a CRT drawing a frame: the child is
@@ -335,6 +398,213 @@ impl gpui::Element for Nudge {
     }
 }
 
+/// Draws its child one interlaced field at a time: the even rows sweep down
+/// first, then the odd ones fill in. Unrevealed rows are covered with
+/// `veil` (the background behind the child), so set that to match.
+pub struct Interlace {
+    child: AnyElement,
+    even: f32,
+    odd: f32,
+    veil: Hsla,
+}
+
+pub fn interlace(child: impl IntoElement, (even, odd): (f32, f32), veil: Hsla) -> Interlace {
+    Interlace { child: child.into_any_element(), even: even.clamp(0., 1.), odd: odd.clamp(0., 1.), veil }
+}
+
+impl IntoElement for Interlace {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl gpui::Element for Interlace {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, window: &mut Window, cx: &mut App) -> (LayoutId, ()) {
+        (self.child.request_layout(window, cx), ())
+    }
+
+    fn prepaint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, _: Bounds<Pixels>, _: &mut (), window: &mut Window, cx: &mut App) {
+        self.child.prepaint(window, cx);
+    }
+
+    fn paint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), _: &mut (), window: &mut Window, cx: &mut App) {
+        self.child.paint(window, cx);
+        if self.even >= 1. && self.odd >= 1. {
+            return;
+        }
+        // One scan line is one logical pixel snapped to whole device pixels.
+        let sf = window.scale_factor();
+        let line = sf.round().max(1.) / sf;
+        let height = f32::from(bounds.size.height);
+        let rows = (height / line).ceil() as usize;
+        let hidden = |i: usize| {
+            let y = i as f32 * line;
+            y >= height * if i % 2 == 0 { self.even } else { self.odd }
+        };
+        // Cover runs of hidden rows: below both sweeps that is one quad.
+        let mut i = 0;
+        while i < rows {
+            if !hidden(i) {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < rows && hidden(i) {
+                i += 1;
+            }
+            let top = start as f32 * line;
+            let bottom = (i as f32 * line).min(height);
+            let quad = Bounds::new(point(bounds.left(), bounds.top() + px(top)), size(bounds.size.width, px(bottom - top)));
+            window.paint_quad(fill(quad, self.veil));
+        }
+    }
+}
+
+/// One horizontal band of its child, shifted sideways: the child is clipped
+/// to `from..to` of its height (fractions) and drawn `dx` across. Three
+/// stacked bands make a tear.
+pub struct Band {
+    child: AnyElement,
+    from: f32,
+    to: f32,
+    dx: Pixels,
+}
+
+pub fn band(child: impl IntoElement, from: f32, to: f32, dx: Pixels) -> Band {
+    Band { child: child.into_any_element(), from, to, dx }
+}
+
+impl Band {
+    fn mask(&self, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+        let h = bounds.size.height;
+        let slack = px(8.);
+        Bounds::new(
+            point(bounds.left() - slack, bounds.top() + h * self.from),
+            size(bounds.size.width + slack * 2., h * (self.to - self.from)),
+        )
+    }
+}
+
+impl IntoElement for Band {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl gpui::Element for Band {
+    type RequestLayoutState = ();
+    type PrepaintState = Bounds<Pixels>;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, window: &mut Window, cx: &mut App) -> (LayoutId, ()) {
+        (self.child.request_layout(window, cx), ())
+    }
+
+    fn prepaint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
+        let mask = self.mask(bounds);
+        let offset = point(self.dx, px(0.));
+        window.with_content_mask(Some(ContentMask { bounds: mask }), |window| {
+            window.with_element_offset(offset, |window| self.child.prepaint(window, cx));
+        });
+        mask
+    }
+
+    fn paint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, _: Bounds<Pixels>, _: &mut (), mask: &mut Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        window.with_content_mask(Some(ContentMask { bounds: *mask }), |window| self.child.paint(window, cx));
+    }
+}
+
+/// Reveals its child like a CRT warming up: a bright `line` draws out from
+/// the centre, then the picture opens vertically from it. `(w, h)` from
+/// [`power_on_band`]. Outside the band nothing is painted.
+pub struct PowerOn {
+    child: AnyElement,
+    w: f32,
+    h: f32,
+    line: Hsla,
+}
+
+pub fn power_on(child: impl IntoElement, (w, h): (f32, f32), line: Hsla) -> PowerOn {
+    PowerOn { child: child.into_any_element(), w: w.clamp(0., 1.), h: h.clamp(0., 1.), line }
+}
+
+impl PowerOn {
+    const LINE: Pixels = px(2.);
+
+    fn band(&self, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+        if self.w >= 1. && self.h >= 1. {
+            return bounds;
+        }
+        let w = bounds.size.width * self.w;
+        let h = (bounds.size.height * self.h).max(Self::LINE);
+        Bounds::new(point(bounds.center().x - w / 2., bounds.center().y - h / 2.), size(w, h))
+    }
+}
+
+impl IntoElement for PowerOn {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl gpui::Element for PowerOn {
+    type RequestLayoutState = ();
+    type PrepaintState = Bounds<Pixels>;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, window: &mut Window, cx: &mut App) -> (LayoutId, ()) {
+        (self.child.request_layout(window, cx), ())
+    }
+
+    fn prepaint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
+        let band = self.band(bounds);
+        window.with_content_mask(Some(ContentMask { bounds: band }), |window| self.child.prepaint(window, cx));
+        band
+    }
+
+    fn paint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, _: Bounds<Pixels>, _: &mut (), band: &mut Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        if self.h <= 0. {
+            // Still drawing the line: only the line shows.
+            window.paint_quad(fill(*band, self.line));
+            return;
+        }
+        window.with_content_mask(Some(ContentMask { bounds: *band }), |window| self.child.paint(window, cx));
+        if self.h < 1. {
+            let edge = |y| Bounds::new(point(band.left(), y), size(band.size.width, Self::LINE));
+            window.paint_quad(fill(edge(band.top()), self.line));
+            window.paint_quad(fill(edge(band.bottom() - Self::LINE), self.line));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,11 +616,15 @@ mod tests {
     #[test]
     fn progress_is_whole_frames() {
         let d = Duration::from_millis(200); // 5 frames
-        assert_eq!(frames(d), 5);
-        assert_eq!(quantise(Duration::from_millis(0), d), 0.);
-        assert_eq!(quantise(Duration::from_millis(39), d), 0.);
-        assert_eq!(quantise(Duration::from_millis(41), d), 0.2);
-        assert_eq!(quantise(Duration::from_millis(999), d), 1.);
+        assert_eq!(frames_at(d, motion::FRAME), 5);
+        assert_eq!(quantise_at(Duration::from_millis(0), d, motion::FRAME), 0.);
+        assert_eq!(quantise_at(Duration::from_millis(39), d, motion::FRAME), 0.);
+        assert_eq!(quantise_at(Duration::from_millis(41), d, motion::FRAME), 0.2);
+        assert_eq!(quantise_at(Duration::from_millis(999), d, motion::FRAME), 1.);
+        // At 240fps the same 200ms clip takes 48 finer steps, same length.
+        let fast = Duration::from_micros(4_167);
+        assert_eq!(frames_at(d, fast), 48);
+        assert_eq!(quantise_at(Duration::from_millis(201), d, fast), 1.);
     }
 
     #[test]
@@ -393,5 +667,40 @@ mod tests {
         }
         assert_eq!(dissolve_level(at(1., 10)), 0.);
         assert_eq!(dissolve_level(at(0., 0)), 1.);
+    }
+
+    #[test]
+    fn new_effects_end_at_rest() {
+        assert_eq!(develop_level(Progress::DONE), 0.);
+        assert_eq!(develop_level(at(0., 0)), 1.);
+        assert_eq!(interlace_fields(Progress::DONE), (1., 1.));
+        assert_eq!(interlace_fields(at(0.25, 1)).1, 0., "odd rows wait for the even field");
+        assert_eq!(interlace_fields(at(0.75, 3)).0, 1., "even field done before odd starts");
+        assert!(tear_bands(Progress::DONE).is_none());
+        assert!(tear_bands(at(0.9, 3)).is_none(), "a tear is three frames");
+        assert!(ping_ring(Progress::DONE).is_none());
+        assert_eq!(power_on_band(Progress::DONE), (1., 1.));
+        assert_eq!(power_on_band(at(0.2, 2)).1, 0., "the line draws before it opens");
+    }
+
+    #[test]
+    fn tears_stay_in_band_and_cover_the_element() {
+        for f in 0..3 {
+            let bands = tear_bands(at(0.1, f)).unwrap();
+            assert_eq!(bands[0].0, 0.);
+            assert_eq!(bands[2].1, 1.);
+            for w in bands.windows(2) {
+                assert_eq!(w[0].1, w[1].0, "bands tile the height");
+            }
+            assert!(bands.iter().all(|b| b.2.abs() <= 6.));
+        }
+    }
+
+    #[test]
+    fn develop_is_bounded_to_64_levels() {
+        for i in 0..=1000 {
+            let level = develop_level(at(i as f32 / 1000., 0));
+            assert_eq!((level * 64.).fract(), 0.);
+        }
     }
 }

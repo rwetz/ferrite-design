@@ -419,6 +419,6 @@ with "missing Metal Toolchain". One-time fix per machine (~840 MB):
 CoreText reports PxPlus advances a hair over a whole cell (8.000001px at
 16px), so text in a box exactly N cells wide shapes slightly wider than the
 box and wraps — the switch's `OFF` became `OF`/`F`. DirectWrite lands on or
-under the cell, so Windows never shows it. The switch readout sets
-`whitespace_nowrap` on macOS. Anything else sized to an exact number of
-display cells needs the same treatment there.
+under the cell, so Windows never shows it. Never size a box to exactly the
+text it holds: the switch readout is four cells for a three-letter word,
+which also keeps `OFF` off the label beside it.

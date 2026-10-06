@@ -62,11 +62,11 @@ gradients, stepped motion. The side-by-side is in
 | `fonts` | Embedded PxPlus IBM VGA 8×16 (display) + JetBrains Mono (body), and device-pixel snapping for the pixel face. |
 | `dither` | Dither as an element over fields (flat, ramp, radial) or grayscale pictures. Patterns: 4×4 Bayer (the texture), blue noise, Atkinson (pictures). Device-pixel cells, rasterised once and cached. |
 | `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
-| `motion` | Stepped motion vocabulary, blink, reduced-motion check. |
+| `motion` | Stepped motion vocabulary, blink, reduced-motion check, and the live refresh rate (`set_fps`, 12–240fps). |
 | `chrome` | Window options, square corners on Windows 11, Ferrite's own `TitleBar`, and `window_frame` (Linux resize edges). |
 | `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `submenu`, `CommandPalette`, `Toaster`, `dialog`, `segmented`, `slider`, `tree`, `table`, `TextInput`, `scroll_area`, `scrollbar`, `virtual_list`, `split` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
 | `icon` | 21 pixel icons drawn on the display font's grid; they never fall back to a system font. |
-| `animate` | The motion engine: stepped, eased clips (`play`) and effects — unroll, dissolve, decrypt, typewriter, shake, count. |
+| `animate` | The motion engine: stepped, eased clips (`play`) and effects — unroll, dissolve, decrypt, typewriter, shake, count, develop, afterglow, interlace, tear, ping, seek, power-on. |
 | `fuzzy` | The palette's matcher: exact best-alignment scoring (word starts, runs, gaps) with match positions. |
 
 ## Use
@@ -98,6 +98,7 @@ Full walkthrough: [docs/SCAFFOLDING.md](docs/SCAFFOLDING.md).
 cargo run --example showcase                       # every primitive, Iron
 FERRITE_APPEARANCE=light cargo run --example showcase   # Paper
 cargo run --example components                     # every native component, live
+FERRITE_FPS=60 cargo run --example components      # any example at another refresh rate
 cargo run --example minimal                        # the scaffolding guide's app
 cargo test                                         # palette/dither/input/layout tripwires
 ```
