@@ -912,7 +912,8 @@ pub fn picture_art(picture: &crate::dither::Picture, cols: usize, style: ArtStyl
     let (w, h) = picture.size();
     let lines = std::rc::Rc::new(art_fit(|u, v| picture.sample(u, v), cols, h as f32 / w.max(1) as f32, style));
     ART_CACHE.with_borrow_mut(|c| {
-        if c.len() >= 96 {
+        // Room for a few films' worth of frames plus the stills.
+        if c.len() >= 512 {
             c.clear();
         }
         c.insert(key, lines.clone());

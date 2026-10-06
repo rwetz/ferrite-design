@@ -20,7 +20,7 @@ use ferrite_design::{
         property_list, scan, select, sidebar, skeleton, skeleton_text, sparkline, stat, steps, timeline, toolbar, wipe_in, afterglow, column, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
     },
     ascii,
-    components::{ascii_art, ascii_bars, ascii_box, ascii_button, ascii_cal, ascii_gauge, ascii_list, ascii_plot, ascii_rule, ascii_table, ascii_tree, banner, marquee},
+    components::{ascii_art, ascii_film, ascii_bars, ascii_box, ascii_button, ascii_cal, ascii_gauge, ascii_list, ascii_plot, ascii_rule, ascii_table, ascii_tree, banner, marquee},
     dither::{self, dither},
     icon::icon,
     motion, palette, theme,
@@ -103,6 +103,7 @@ struct Components {
     orb: dither::Picture,
     scenes: Vec<(&'static str, dither::Picture)>,
     art_scene: usize,
+    films: [std::rc::Rc<[dither::Picture]>; 3],
     art_fit: usize,
     art_contrast: usize,
     art_invert: bool,
@@ -209,6 +210,7 @@ impl Components {
                 ("Type", dither::Picture::from_fn(720, 480, type_scene)),
             ],
             art_scene: 0,
+            films: [donut_frames(48).into(), planet_frames(36).into(), wave_frames(24).into()],
             art_fit: 0,
             art_contrast: 0,
             art_invert: false,
@@ -1374,6 +1376,31 @@ impl Components {
             .child(note("Charset::Full, shape fit: every cell is compared with the face's ~200 text glyphs — their real 8×16 pixels, softened the way the eye sees them — and takes the closest in shape and ink. Edges pick their stroke: / | _ ( ; the shading picks its density."));
 
         let cell = ferrite_design::fonts::display_size(Scale::X1, window) / 2.;
+        // Animated: loops of pictures, each frame fitted once and cached.
+        let [donut, planet, waves] = self.films.clone();
+        let films = div()
+            .flex()
+            .flex_row()
+            .flex_wrap()
+            .items_start()
+            .gap(space::ROW)
+            .child(
+                ascii_box()
+                    .title("ascii_film · donut · best character")
+                    .style(ascii::DOUBLE)
+                    .ink(hsla(p.accent))
+                    .child(ascii_film("film-donut", donut).cols(96).charset(ascii::Charset::Full).fps(15).color(hsla(p.accent_text))),
+            )
+            .child(
+                ascii_box()
+                    .title("planet · accents")
+                    .child(ascii_film("film-planet", planet).cols(64).charset(ascii::Charset::Accents).contrast(1.4).fps(12)),
+            )
+            .child(
+                ascii_box()
+                    .title("waves · slashes")
+                    .child(ascii_film("film-waves", waves).cols(64).charset(ascii::Charset::Slashes).fps(12)),
+            );
         let tiles = ascii::Charset::ALL.iter().filter(|c| **c != ascii::Charset::Full).map(|c| {
             let sample: String = c.chars().chars().skip(1).take(18).collect();
             ascii_box()
@@ -1390,6 +1417,7 @@ impl Components {
             .child(note("ascii_art(picture).charset(..): any set of the face's glyphs, fitted by tone (density ramp, sorted from the real pixels) or by shape (best 4×8 match). Results are cached per picture and style."))
             .child(controls)
             .child(hero)
+            .child(films)
             .child(div().flex().flex_row().flex_wrap().gap(space::ROW).children(tiles))
     }
 
@@ -2115,6 +2143,88 @@ impl Render for Components {
 /// The display face at its crisp 1× size, for elements styled by hand.
 fn fonts_x1(window: &Window) -> gpui::Pixels {
     ferrite_design::fonts::display_size(Scale::X1, window)
+}
+
+/// The spinning torus of donut.c, as a loop of `n` pictures (3:2): one full
+/// turn on both axes, so the loop is seamless.
+fn donut_frames(n: usize) -> Vec<dither::Picture> {
+    use std::f32::consts::TAU;
+    let (w, h) = (240usize, 160usize);
+    (0..n)
+        .map(|f| {
+            let t = f as f32 / n as f32;
+            let (a, b) = (TAU * t, TAU * t * 2.);
+            let (sa, ca, sb, cb) = (a.sin(), a.cos(), b.sin(), b.cos());
+            let (r1, r2, k2) = (1., 2., 5.);
+            let k1 = h as f32 * k2 * 3. / (8. * (r1 + r2));
+            let mut zbuf = vec![0f32; w * h];
+            let mut lum = vec![0u8; w * h];
+            let mut theta = 0f32;
+            while theta < TAU {
+                let (st, ct) = (theta.sin(), theta.cos());
+                let mut phi = 0f32;
+                while phi < TAU {
+                    let (sp, cp) = (phi.sin(), phi.cos());
+                    let (cx, cy) = (r2 + r1 * ct, r1 * st);
+                    let x = cx * (cb * cp + sa * sb * sp) - cy * ca * sb;
+                    let y = cx * (sb * cp - sa * cb * sp) + cy * ca * cb;
+                    let ooz = 1. / (k2 + ca * cx * sp + cy * sa);
+                    let px = (w as f32 / 2. + k1 * ooz * x) as isize;
+                    let py = (h as f32 / 2. - k1 * ooz * y) as isize;
+                    let l = cp * ct * sb - ca * ct * sp - sa * st + cb * (ca * st - ct * sa * sp);
+                    if (0..w as isize).contains(&px) && (0..h as isize).contains(&py) {
+                        let i = py as usize * w + px as usize;
+                        if ooz > zbuf[i] {
+                            zbuf[i] = ooz;
+                            lum[i] = ((0.12 + 0.88 * (l.max(0.) / std::f32::consts::SQRT_2)).min(1.) * 255.) as u8;
+                        }
+                    }
+                    phi += 0.008;
+                }
+                theta += 0.02;
+            }
+            dither::Picture::new(w as u32, h as u32, lum)
+        })
+        .collect()
+}
+
+/// A banded planet turning once, lit from the left, with a storm (3:2).
+fn planet_frames(n: usize) -> Vec<dither::Picture> {
+    (0..n)
+        .map(|f| {
+            let turn = f as f32 / n as f32 * std::f32::consts::TAU;
+            dither::Picture::from_fn(240, 160, move |u, v| {
+                let (x, y) = ((u - 0.5) * 1.5 / 0.42, (v - 0.5) / 0.42);
+                let r2 = x * x + y * y;
+                if r2 >= 1. {
+                    return 0.;
+                }
+                let z = (1. - r2).sqrt();
+                let light = (-0.7 * x - 0.3 * y + 0.65 * z).max(0.);
+                let lon = x.atan2(z) + turn;
+                let lat = y.asin();
+                let bands = 0.5 + 0.25 * (lat * 11. + 0.6 * lon.sin()).sin();
+                let (dl, dt) = ((lon - 1.).sin() * z, lat - 0.35);
+                let storm = if dl * dl * 6. + dt * dt * 40. < 0.12 { 0.35 } else { 0. };
+                ((bands + storm) * (0.15 + 0.85 * light)).clamp(0., 1.)
+            })
+        })
+        .collect()
+}
+
+/// Two sources interfering, rippling outward through one period (3:2).
+fn wave_frames(n: usize) -> Vec<dither::Picture> {
+    (0..n)
+        .map(|f| {
+            let phase = f as f32 / n as f32 * std::f32::consts::TAU;
+            dither::Picture::from_fn(240, 160, move |u, v| {
+                let (x, y) = (u * 1.5, v);
+                let d1 = ((x - 0.45).powi(2) + (y - 0.35).powi(2)).sqrt();
+                let d2 = ((x - 1.05).powi(2) + (y - 0.65).powi(2)).sqrt();
+                0.5 + 0.25 * (d1 * 40. - phase).sin() + 0.25 * (d2 * 40. - phase).sin()
+            })
+        })
+        .collect()
 }
 
 /// A fractal: the Mandelbrot set, smooth escape time (3:2).

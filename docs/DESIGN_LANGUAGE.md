@@ -253,6 +253,7 @@ set. Two layers:
   | `banner(id, text)` | big 5×5 block letters, drawn on with a wipe | title screens, splash, empty states |
   | `ascii_art(picture)` | a grayscale `Picture` as characters: a ramp, or a `Charset` (punctuation, slashes, accents, box drawing, best character…) matched by shape against the face's real glyphs | hero art, about boxes, loading art |
   | `ascii_gauge(v)` | `CPU [████▒·····]  42%` | dense live readouts; never animates |
+  | `ascii_film(id, frames)` | a loop of pictures played as ASCII art | splash screens, idle and attract states — continuous motion, so one per screen and never behind work |
   | `ascii_table()` | a boxed text grid: `┌──┬──┐ │ │ ├──┼──┤` | readouts, reports, about boxes (`table` is the interactive one) |
   | `ascii_tree()` | `├── src/` `│   └── lib.rs` | file listings, outlines, dependency trees |
   | `ascii_plot(values)` | `*` points joined by `:`, a labelled axis | a series in a text screen |

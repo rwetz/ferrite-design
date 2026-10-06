@@ -1129,6 +1129,92 @@ impl RenderOnce for AsciiList {
     }
 }
 
+// ── Film ──────────────────────────────────────────────────────────────────
+
+/// A loop of pictures played as ASCII art: a spinning logo, a turning
+/// planet, an attract screen. Every frame is fitted once (by
+/// `ascii::picture_art`, cached) and then just shown, so after the first
+/// loop playback costs a text re-render per frame. Plays on a timer while
+/// shown, like a spinner — continuous motion, so one per screen, for
+/// splash and idle states, never behind work. Holds the first frame under
+/// reduced motion.
+#[derive(IntoElement)]
+pub struct AsciiFilm {
+    id: ElementId,
+    frames: Rc<[Picture]>,
+    cols: usize,
+    style: ascii::ArtStyle,
+    fit: Option<ascii::Fit>,
+    fps: u32,
+    color: Option<Hsla>,
+}
+
+/// Play `frames` in a loop as ASCII art (default: 64 columns, classic
+/// ramp, 12fps).
+pub fn ascii_film(id: impl Into<ElementId>, frames: impl Into<Rc<[Picture]>>) -> AsciiFilm {
+    AsciiFilm { id: id.into(), frames: frames.into(), cols: 64, style: ascii::ArtStyle::default(), fit: None, fps: 12, color: None }
+}
+
+impl AsciiFilm {
+    pub fn cols(mut self, cols: usize) -> Self {
+        self.cols = cols.max(1);
+        self
+    }
+
+    /// Any `ascii::Charset`; its default fit and diffusion come with it.
+    pub fn charset(mut self, charset: ascii::Charset) -> Self {
+        let ascii::ArtStyle { contrast, invert, .. } = self.style;
+        self.style = ascii::ArtStyle { contrast, invert, ..ascii::ArtStyle::new(charset) };
+        self
+    }
+
+    pub fn fit(mut self, fit: ascii::Fit) -> Self {
+        self.fit = Some(fit);
+        self
+    }
+
+    pub fn contrast(mut self, contrast: f32) -> Self {
+        self.style.contrast = contrast.max(0.);
+        self
+    }
+
+    pub fn invert(mut self, invert: bool) -> Self {
+        self.style.invert = invert;
+        self
+    }
+
+    /// Playback rate (default 12; clamped to 1–25 — this is a flip book,
+    /// not video).
+    pub fn fps(mut self, fps: u32) -> Self {
+        self.fps = fps.clamp(1, 25);
+        self
+    }
+
+    pub fn color(mut self, color: Hsla) -> Self {
+        self.color = Some(color);
+        self
+    }
+}
+
+impl RenderOnce for AsciiFilm {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        if self.frames.is_empty() {
+            return div();
+        }
+        let n = super::ticker::ticker(self.id, std::time::Duration::from_millis(1000 / self.fps as u64), window, cx);
+        let picture = &self.frames[n as usize % self.frames.len()];
+        let style = ascii::ArtStyle { fit: self.fit.unwrap_or(self.style.fit), ..self.style };
+        let lines = ascii::picture_art(picture, self.cols, style);
+        div()
+            .flex()
+            .flex_col()
+            .flex_none()
+            .text_color(self.color.unwrap_or_else(|| hsla(p.fg)))
+            .children(lines.iter().map(|l| div().display(Scale::X1, window).whitespace_nowrap().child(l.clone())))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::perimeter;

@@ -63,8 +63,8 @@ pub use table::{Column, SortDir, Table, column, table};
 pub use tabs::{Tabs, tabs};
 pub use tag::{Meter, Tag, meter, tag};
 pub use textmode::{
-    AsciiArt, AsciiBars, AsciiBox, AsciiButton, AsciiCal, AsciiGauge, AsciiList, AsciiPlot, AsciiRule, AsciiTable, AsciiTree,
-    Banner, Marquee, Mark, ascii_art, ascii_bars, ascii_box, ascii_button, ascii_cal, ascii_gauge, ascii_list, ascii_plot,
+    AsciiArt, AsciiBars, AsciiBox, AsciiButton, AsciiCal, AsciiFilm, AsciiGauge, AsciiList, AsciiPlot, AsciiRule, AsciiTable, AsciiTree,
+    Banner, Marquee, Mark, ascii_art, ascii_bars, ascii_box, ascii_button, ascii_cal, ascii_film, ascii_gauge, ascii_list, ascii_plot,
     ascii_rule, ascii_table, ascii_tree, banner, mark, marquee,
 };
 pub use toggle::{Switch, Toggle, checkbox, radio, switch};

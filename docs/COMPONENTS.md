@@ -92,6 +92,7 @@ with a scheme picker), and whole apps built from them in `examples/app_*.rs`.
 | **`ascii_gauge`** | `textmode` | `[████▒·····] 42%`; live-data safe |
 | **`mark`** | `textmode` | the `▓▒░` mark as real dither |
 | **`ascii_table`** | `textmode` | boxed text grid with junctions, numbers right-aligned, `.selected(row)` |
+| **`ascii_film`** | `textmode` | a loop of `Picture`s played as ASCII art (any charset/fit), each frame fitted once and cached; on a timer while shown — one per screen, splash and idle only |
 | **`ascii_tree`** | `textmode` | `├──` / `└──` outline, `tree`-command style |
 | **`ascii_plot`** | `textmode` | `*` line plot joined with `:`, labelled axis |
 | **`ascii_bars`** | `textmode` | labelled horizontal bars, gauge fills, readouts |
