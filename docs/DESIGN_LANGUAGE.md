@@ -31,7 +31,7 @@ Ferrite deliberately keeps the Nexis *rules* and replaces the Nexis *look*.
 |---|---|---|
 | One accent carries identity | coral `oklch(0.72 0.15 35)` | phosphor amber `#F2A93B` |
 | Neutral base palette | cool OKLCH greys, glass | near-pure iron greys, opaque |
-| Tokens have one source of truth | `globals.css` + theme engine | `src/tokens.rs` → projected into gpui-component |
+| Tokens have one source of truth | `globals.css` + theme engine | `src/tokens.rs` → `palette(cx)` in every component |
 | Theme applied before first paint | `index.html` anti-flash script | `theme::install` before `open_window` |
 | Shared motion vocabulary | springs (`snappy/smooth/gentle`) | steps (`FAST/BASE/SLOW`, `steps(n)`, `BLINK`) |
 | Respect reduced motion | `MotionConfig reducedMotion="user"` | `motion::reduced(cx)` → render final state |
@@ -246,13 +246,10 @@ Use `chrome::window_options(..)` for every window and call
 
 ## 8. Components
 
-Ferrite owns its everyday controls — `Button`, `checkbox`, `radio`,
-`switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner` —
-and its framing (`TitleBar`, `Panel`, `StatusBar`, `rule`, `cursor`,
-`progress_bar`, `empty_state`, `Dither`). The heavy machinery (inputs,
-virtual lists, tables, docking, menus) still comes from **gpui-component**
-wearing the Ferrite theme. Status and plan: [COMPONENTS.md](COMPONENTS.md);
-see them all with `cargo run --example components`.
+Every component is Ferrite's own — controls, overlays, the text input,
+scrolling, lists, layout and framing. Nothing in a Ferrite window comes
+from a component library. Catalogue: [COMPONENTS.md](COMPONENTS.md); see
+them all with `cargo run --example components`.
 
 The control grammar, in one place:
 
@@ -274,6 +271,9 @@ The control grammar, in one place:
 | tree | 1px connector guides in `line_strong`, centred under the parent's chevron — never box-drawing glyphs, which break between rows |
 | table | display-face header on `surface` with a `line_strong` rule; ▲/▼ in amber on the sorted column; numbers right-aligned |
 | submenu | opens to the right, instantly on hover, first row level with its parent row; parent row stays highlighted; `>` chevron marks the row |
+| text input | `sunken` well, 1px `line_strong` frame → amber when focused; 2px amber caret blinking at `motion::BLINK`; selection is a translucent amber wash |
+| scrollbar | 10px track on `surface` with a hairline, square `line_strong` thumb; `fg_faint` on hover, amber while dragged |
+| split | 1px divider, amber while hovered or dragged; resize cursor over a 7px grab zone |
 | notification | toast: floating surface + 2px tone bar on the left, display-face code (`INFO OK WARN ERR`), countdown drained in 16 steps along the bottom edge |
 | match highlight | matched characters in `accent_text`, nothing else |
 

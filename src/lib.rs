@@ -24,9 +24,6 @@
 //! See `docs/DESIGN_LANGUAGE.md` for the full language and
 //! `examples/showcase.rs` for every primitive on one screen.
 
-// The theme config is one large `json!` literal.
-#![recursion_limit = "512"]
-
 pub mod ascii;
 pub mod chrome;
 pub mod components;
@@ -44,12 +41,12 @@ pub use icon::{Icon, icon};
 pub use theme::{Appearance, palette};
 pub use tokens::{IRON, PAPER, Palette};
 
-/// Initialise gpui-component, register Ferrite's fonts and install its theme.
+/// Register Ferrite's key bindings and fonts and install its appearance.
 ///
 /// Call once at startup, **before opening any window**, so the first frame
 /// is already Ferrite.
 pub fn init(appearance: Appearance, cx: &mut gpui::App) {
-    gpui_component::init(cx);
+    components::input::init(cx);
     components::palette::init(cx);
     if let Err(err) = fonts::register(cx) {
         // Text falls back to system faces; the app still works.

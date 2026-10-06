@@ -1,5 +1,4 @@
-//! Every Ferrite primitive on one screen, next to stock gpui-component
-//! widgets wearing the Ferrite theme.
+//! Every Ferrite primitive on one screen.
 //!
 //!     cargo run --example showcase
 
@@ -21,7 +20,6 @@ use gpui::{
     StatefulInteractiveElement as _,
 };
 use ferrite_design::components::{Button, switch, tag};
-use gpui_component::Root;
 
 struct Showcase {
     tick: u64,
@@ -255,8 +253,7 @@ fn main() {
         let options = chrome::window_options("Ferrite Showcase", size(px(1080.), px(860.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);
-            let view = cx.new(|cx| Showcase::new(window, cx));
-            cx.new(|cx| Root::new(view, window, cx))
+            cx.new(|cx| Showcase::new(window, cx))
         })
         .expect("failed to open the showcase window");
         cx.activate(true);

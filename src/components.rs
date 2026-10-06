@@ -1,18 +1,20 @@
 //! Ferrite's own structural components.
 //!
-//! These are the first pieces of the native component set that will, over
-//! time, replace gpui-component (docs/COMPONENTS.md). They cover what the
-//! library has no opinion on — the *framing* — so apps can use gpui-component
-//! widgets inside Ferrite frames today.
+//! Ferrite's whole component set (docs/COMPONENTS.md): controls, overlays,
+//! the text input, scrolling and layout in the submodules, and the framing
+//! (`Panel`, `StatusBar`, `rule`, …) here.
 
 pub mod button;
 pub mod dialog;
+pub mod input;
 pub mod list;
 pub mod menu;
 pub mod overlay;
 pub mod palette;
+pub mod scroll;
 pub mod segmented;
 pub mod slider;
+pub mod split;
 pub mod table;
 pub mod tabs;
 pub mod tag;
@@ -24,12 +26,15 @@ pub mod tooltip;
 
 pub use button::Button;
 pub use dialog::{Dialog, dialog};
+pub use input::{InputEvent, TextInput};
 pub use list::{ListItem, list_item};
 pub use menu::{Menu, MenuItem, Submenu, context_menu, dropdown_menu, menu_item, submenu};
 pub use overlay::{Align, Popover, popover};
 pub use palette::{CommandPalette, PaletteCommand, TogglePalette, command};
 pub use segmented::{Segmented, segmented};
+pub use scroll::{ScrollArea, Scrollbar, VirtualList, scroll_area, scrollbar, virtual_list};
 pub use slider::{Slider, slider};
+pub use split::{Split, split};
 pub use table::{Column, SortDir, Table, column, table};
 pub use tabs::{Tabs, tabs};
 pub use tag::{Meter, Tag, meter, tag};
@@ -88,14 +93,16 @@ impl Styled for Panel {
 impl RenderOnce for Panel {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
-        let mut root = div()
-            .flex()
+        // Caller's style (size, flex) first, the frame on top — assigning the
+        // style afterwards would wipe the frame (PITFALLS §35).
+        let mut root = div();
+        *root.style() = self.style;
+        root.flex()
             .flex_col()
             .bg(hsla(p.bg))
             .border_1()
-            .border_color(hsla(p.line));
-        *root.style() = self.style;
-        root.child(
+            .border_color(hsla(p.line))
+            .child(
             div()
                 .flex()
                 .flex_row()

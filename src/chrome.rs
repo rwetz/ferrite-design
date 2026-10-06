@@ -1,9 +1,8 @@
 //! Window chrome: square, self-drawn on Windows and Linux, native traffic
 //! lights on macOS. The same platform split as Nexis, a different look.
 //!
-//! [`TitleBar`] is Ferrite's own component, not gpui-component's. It follows
-//! the library's platform handling closely (that part is hard-won; see
-//! docs/PITFALLS.md) but draws text-mode controls — `_` `□` `x` in the
+//! [`TitleBar`] ports gpui-component's platform handling (that part is
+//! hard-won; see docs/PITFALLS.md) but draws text-mode controls — `_` `□` `x` in the
 //! display face — and a dithered drag strip instead of a gradient.
 
 use gpui::{
@@ -13,7 +12,6 @@ use gpui::{
     WindowDecorations, WindowOptions, div, point, prelude::FluentBuilder as _, px, size,
 };
 
-use gpui_component::InteractiveElementExt as _;
 
 use crate::dither::{self, dither};
 use crate::fonts::{FerriteText, Scale};
@@ -121,8 +119,15 @@ impl RenderOnce for TitleBar {
             .border_b_1()
             .border_color(hsla(p.line))
             .when(IS_MAC, |this| this.pl(MAC_TRAFFIC_LIGHT_PAD))
-            .when(IS_LINUX, |this| this.on_double_click(|_, window, _| window.zoom_window()))
-            .when(IS_MAC, |this| this.on_double_click(|_, window, _| window.titlebar_double_click()))
+            // Double-click to maximize (Windows gets this from the OS via the
+            // caption hit-test).
+            .when(IS_LINUX || IS_MAC, |this| {
+                this.on_click(|ev, window, _| {
+                    if ev.click_count() == 2 {
+                        if IS_MAC { window.titlebar_double_click() } else { window.zoom_window() }
+                    }
+                })
+            })
             // Drag by starting a window move on the first mouse-move after a
             // press — not on press, or clicks on children would drag.
             .on_mouse_down_out(window.listener_for(&state, |s, _, _, _| s.should_move = false))
@@ -250,4 +255,140 @@ fn control(kind: Control, window: &mut Window, cx: &mut App) -> impl IntoElement
             })
         })
         .child(glyph)
+}
+
+// ── Window frame ──────────────────────────────────────────────────────────
+
+/// How far in from each window edge a press starts a resize.
+const RESIZE_ZONE: Pixels = px(6.);
+
+/// Wraps a window's whole content. Where the app draws its own decorations
+/// (Linux with client-side decorations), it adds what the window manager
+/// would have: a square 1px `line_strong` frame and resize edges with the
+/// right cursors, both dropped on sides the window is tiled against.
+/// Everywhere else (Windows, macOS, Linux with server decorations) it's a
+/// plain full-size container.
+///
+/// ```ignore
+/// window_frame().child(title_bar("App")).child(body)
+/// ```
+#[derive(IntoElement)]
+pub struct WindowFrame {
+    children: Vec<AnyElement>,
+}
+
+pub fn window_frame() -> WindowFrame {
+    WindowFrame { children: Vec::new() }
+}
+
+impl ParentElement for WindowFrame {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+/// Which edge (if any) a window-relative point is on. Pure.
+pub fn resize_edge(pos: gpui::Point<Pixels>, zone: Pixels, size: Size<Pixels>, tiling: gpui::Tiling) -> Option<gpui::ResizeEdge> {
+    use gpui::ResizeEdge as E;
+    let top = !tiling.top && pos.y < zone;
+    let bottom = !tiling.bottom && pos.y > size.height - zone;
+    let left = !tiling.left && pos.x < zone;
+    let right = !tiling.right && pos.x > size.width - zone;
+    Some(match (top, bottom, left, right) {
+        (true, _, true, _) => E::TopLeft,
+        (true, _, _, true) => E::TopRight,
+        (_, true, true, _) => E::BottomLeft,
+        (_, true, _, true) => E::BottomRight,
+        (true, ..) => E::Top,
+        (_, true, ..) => E::Bottom,
+        (_, _, true, _) => E::Left,
+        (_, _, _, true) => E::Right,
+        _ => return None,
+    })
+}
+
+impl RenderOnce for WindowFrame {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let root = div().size_full().flex().flex_col();
+        let Decorations::Client { tiling } = window.window_decorations() else {
+            return root.children(self.children);
+        };
+        // Opaque, square, no shadow: nothing to inset.
+        window.set_client_inset(px(0.));
+        let line = hsla(p.line_strong);
+        root.relative()
+            .when(!tiling.top, |el| el.border_t_1())
+            .when(!tiling.bottom, |el| el.border_b_1())
+            .when(!tiling.left, |el| el.border_l_1())
+            .when(!tiling.right, |el| el.border_r_1())
+            .border_color(line)
+            .children(self.children)
+            .child(
+                gpui::canvas(
+                    |_, window, _| {
+                        let size = window.window_bounds().get_bounds().size;
+                        window.insert_hitbox(Bounds::new(point(px(0.), px(0.)), size), gpui::HitboxBehavior::Normal)
+                    },
+                    move |_, hitbox, window, _| {
+                        let size = window.window_bounds().get_bounds().size;
+                        if let Some(edge) = resize_edge(window.mouse_position(), RESIZE_ZONE, size, tiling) {
+                            use gpui::{CursorStyle as C, ResizeEdge as E};
+                            let cursor = match edge {
+                                E::Top | E::Bottom => C::ResizeUpDown,
+                                E::Left | E::Right => C::ResizeLeftRight,
+                                E::TopLeft | E::BottomRight => C::ResizeUpLeftDownRight,
+                                E::TopRight | E::BottomLeft => C::ResizeUpRightDownLeft,
+                            };
+                            window.set_cursor_style(cursor, &hitbox);
+                        }
+                        // Capture phase: an edge press resizes even over content.
+                        window.on_mouse_event(move |ev: &gpui::MouseDownEvent, phase, window, cx| {
+                            if !phase.capture() || ev.button != MouseButton::Left {
+                                return;
+                            }
+                            let size = window.window_bounds().get_bounds().size;
+                            if let Some(edge) = resize_edge(ev.position, RESIZE_ZONE, size, tiling) {
+                                cx.stop_propagation();
+                                window.start_window_resize(edge);
+                            }
+                        });
+                        // Cursor follows the pointer between edges.
+                        window.on_mouse_event(|_: &gpui::MouseMoveEvent, phase, window, _| {
+                            if phase.bubble() {
+                                window.refresh();
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .inset_0(),
+            )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{ResizeEdge as E, Tiling};
+
+    #[test]
+    fn edges_and_corners() {
+        let size = gpui::size(px(800.), px(600.));
+        let free = Tiling::default();
+        let at = |x: f32, y: f32| resize_edge(point(px(x), px(y)), RESIZE_ZONE, size, free);
+        assert_eq!(at(2., 2.), Some(E::TopLeft));
+        assert_eq!(at(798., 598.), Some(E::BottomRight));
+        assert_eq!(at(400., 2.), Some(E::Top));
+        assert_eq!(at(2., 300.), Some(E::Left));
+        assert_eq!(at(400., 300.), None);
+    }
+
+    #[test]
+    fn tiled_sides_dont_resize() {
+        let size = gpui::size(px(800.), px(600.));
+        let tiled = Tiling { left: true, ..Tiling::default() };
+        assert_eq!(resize_edge(point(px(2.), px(300.)), RESIZE_ZONE, size, tiled), None);
+        assert_eq!(resize_edge(point(px(2.), px(2.)), RESIZE_ZONE, size, tiled), Some(E::Top));
+    }
 }

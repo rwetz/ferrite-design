@@ -11,13 +11,14 @@ keywords = ["gpui", "design-system", "dither", "ascii", "ui"]
 categories = ["gui"]
 
 [dependencies]
-# gpui-component pins its gpui; we must name the exact same one or the two
-# crates see two different `App` types. Bump both together.
+# Ferrite depends on gpui and nothing built on top of it: every component is
+# its own. Pinned exactly so a gpui release can't change behaviour under us;
+# the two crates must stay on the same version.
 gpui = { package = "gpui-pre", version = "=0.3.8" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
-gpui-component = "=0.7.1"
-serde_json = "1"
 anyhow = "1"
+# Grapheme-aware caret movement in the text input.
+unicode-segmentation = "1"
 # Same major as gpui's; dither rasters are handed to gpui as image::Frame.
 image = { version = "0.25", default-features = false }
 raw-window-handle = "0.6"
@@ -27,7 +28,7 @@ raw-window-handle = "0.6"
 # Windows 11's forced rounded corners (see chrome::square_corners).
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
 
-# gpui and gpui-component are unusably slow unoptimised. Optimise every
+# gpui is unusably slow unoptimised. Optimise every
 # dependency even in dev builds; our own crate stays debuggable.
 [profile.dev.package."*"]
 opt-level = 3

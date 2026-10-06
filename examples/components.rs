@@ -1,5 +1,5 @@
-//! Every native Ferrite component, live and wired to state, plus the
-//! gpui-component widgets they replace side by side.
+//! Every Ferrite component, live and wired to state, on three pages:
+//! controls, data & input, layout.
 //!
 //!     cargo run --example components
 //!     FERRITE_APPEARANCE=light cargo run --example components
@@ -15,7 +15,7 @@ use ferrite_design::{
     components::{
         Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
-        SortDir, column, dialog, segmented, slider, table, tree, tree_node,
+        InputEvent, SortDir, TextInput, column, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
     },
     icon::icon,
     motion, palette, theme,
@@ -24,12 +24,6 @@ use ferrite_design::{
 use gpui::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render,
     SharedString, StatefulInteractiveElement as _, Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, size,
-};
-use gpui_component::{
-    Root,
-    button::{Button as LibButton, ButtonVariants as _},
-    switch::Switch as LibSwitch,
-    tag::Tag as LibTag,
 };
 
 const FILES: [(Icon, &str, &str); 5] = [
@@ -41,7 +35,8 @@ const FILES: [(Icon, &str, &str); 5] = [
 ];
 const PROCS: [(&str, &str); 4] = [("ferrite-atlas", "pid 4412"), ("cargo", "pid 9021"), ("rust-analyzer", "pid 3310"), ("showcase", "pid 7777")];
 const MODES: [&str; 3] = ["Fast", "Balanced", "Thorough"];
-const PAGES: [&str; 2] = ["Controls", "Data & input"];
+const PAGES: [&str; 3] = ["Controls", "Data & input", "Layout"];
+const LOG_LINES: usize = 10_000;
 const PROC_TABLE: [(&str, u32, f32, u32, &str); 6] = [
     ("ferrite-atlas", 4412, 31.0, 412, "run"),
     ("cargo", 9021, 12.4, 188, "run"),
@@ -77,7 +72,8 @@ struct Components {
     tab: usize,
     row: usize,
     tick: u64,
-    lib_switch: bool,
+    inputs: Vec<Entity<TextInput>>,
+    _input_subs: Vec<Subscription>,
     word_wrap: bool,
     show_hidden: bool,
     hide_merged: bool,
@@ -99,6 +95,34 @@ struct Components {
 
 impl Components {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let inputs: Vec<Entity<TextInput>> = vec![
+            cx.new(|cx| TextInput::new(window, cx).placeholder("project name")),
+            cx.new(|cx| TextInput::new(window, cx).placeholder("filter files…").prompt(">")),
+            cx.new(|cx| TextInput::new(window, cx).placeholder("api token").masked(true)),
+            cx.new(|cx| {
+                let mut t = TextInput::new(window, cx).placeholder("read-only");
+                t.set_value("ferrite-design", cx);
+                t.set_disabled(true, cx);
+                t
+            }),
+        ];
+        let input_subs = inputs
+            .iter()
+            .enumerate()
+            .map(|(i, input)| {
+                cx.subscribe(input, move |this: &mut Components, input, ev: &InputEvent, cx| {
+                    let name = ["NAME", "FILTER", "TOKEN", "LOCKED"][i];
+                    match ev {
+                        InputEvent::Change => cx.notify(),
+                        InputEvent::Submit => {
+                            let v = input.read(cx).value();
+                            let shown = if i == 2 { "•".repeat(v.chars().count()) } else { v.to_string() };
+                            this.log(format!("{name} = {shown}"), cx);
+                        }
+                    }
+                })
+            })
+            .collect();
         // Meters update twice a second — the rate the data would.
         if !motion::reduced(cx) {
             cx.spawn(async move |this, cx| {
@@ -122,7 +146,8 @@ impl Components {
             tab: 0,
             row: 2,
             tick: 0,
-            lib_switch: false,
+            inputs,
+            _input_subs: input_subs,
             word_wrap: true,
             show_hidden: false,
             hide_merged: true,
@@ -258,6 +283,83 @@ impl Components {
         });
         // Selection follows the row, not the index.
         self.proc_sel = selected.and_then(|pid| self.procs.iter().position(|p| p.pid == pid));
+    }
+
+    fn layout_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        // A deterministic fake log: level, subsystem, message.
+        let line = |i: usize| -> (&'static str, u32, String) {
+            let h = (i as u64).wrapping_mul(2654435761) % 1000;
+            let (level, ink) = match h {
+                0..=11 => ("ERR ", p.danger),
+                12..=59 => ("WARN", p.warning),
+                _ => ("INFO", p.fg_dim),
+            };
+            let sys = ["dither", "raster", "input", "palette", "chrome", "toast"][(h % 6) as usize];
+            (level, ink, format!("{sys}: frame {} ok in {}.{:02}ms", i * 3, h % 9, h % 97))
+        };
+        let log = virtual_list("log", LOG_LINES, move |range, _, _| {
+            range
+                .map(|i| {
+                    let (level, ink, msg) = line(i);
+                    div()
+                        .h(px(22.))
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap_3()
+                        .px_3()
+                        .body(text::SM)
+                        .child(div().w(px(56.)).flex_none().text_color(hsla(p.fg_faint)).child(format!("{:>5}", i + 1)))
+                        .child(div().w(px(40.)).flex_none().text_color(hsla(ink)).child(level))
+                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_color(hsla(p.fg)).child(msg))
+                        .into_any_element()
+                })
+                .collect()
+        })
+        .size_full();
+
+        let files = scroll_area("files-scroll").size_full().child(
+            div().flex().flex_col().py_1().children((0..48usize).map(|i| {
+                let name = format!("module_{i:02}.rs");
+                list_item(("file", i), name).icon(Icon::File).meta(format!("{}.{} KB", 1 + i % 9, i % 10)).selected(i == 3)
+            })),
+        );
+
+        let pane = |title: &'static str, meta: String, body: gpui::AnyElement| {
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .h(px(28.))
+                        .px_3()
+                        .bg(hsla(p.surface))
+                        .border_b_1()
+                        .border_color(hsla(p.line))
+                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(title))
+                        .child(div().body(text::XS).text_color(hsla(p.fg_faint)).child(meta)),
+                )
+                .child(div().flex_1().min_h_0().child(body))
+        };
+
+        div().flex().flex_col().gap(space::ROW).child(
+            panel("Split · scroll area · virtual list").meta("drag the divider · double-click resets").child(
+                split("layout-split")
+                    .initial(0.28)
+                    .min(px(180.))
+                    .h(px(560.))
+                    .border_1()
+                    .border_color(hsla(p.line))
+                    .first(pane("FILES", "48 items".into(), files.into_any_element()))
+                    .second(pane("LOG", format!("{LOG_LINES} lines · only visible rows render"), log.into_any_element())),
+            ),
+        )
     }
 
     fn data_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
@@ -521,7 +623,7 @@ impl Render for Components {
         let any = self.checks.iter().any(|c| *c);
 
         // ── Buttons ──────────────────────────────────────────────────────
-        let buttons = panel("Button").meta("native · replaces gpui-component #2").child(
+        let buttons = panel("Button").meta("primary · secondary · ghost · danger").child(
             div()
                 .flex()
                 .flex_col()
@@ -657,27 +759,33 @@ impl Render for Components {
                     .on_select(cx.listener(|this, i: &usize, _, cx| { this.tab = *i; this.row = 0; this.log(format!("TAB {}", i + 1), cx); })),
             )
             .child(list_body);
-        let navigation = panel("Tabs + List").meta("native · replaces #6").child(browser);
+        let navigation = panel("Tabs + List").meta("tabs · list_item").child(browser);
 
         // ── Versus ───────────────────────────────────────────────────────
-        let versus = panel("Native vs gpui-component").meta("same theme, different geometry").child(
+        let field = |label: &'static str, input: &Entity<TextInput>| {
             div()
                 .flex()
                 .flex_row()
-                .gap(space::X3)
+                .items_center()
+                .gap_3()
+                .child(div().w(px(72.)).flex_none().body(text::SM).text_color(hsla(p.fg_dim)).child(label))
+                .child(div().flex_1().child(input.clone()))
+        };
+        let name = self.inputs[0].read(cx).value();
+        let versus = panel("Text input").meta("native · IME · undo · Enter submits").child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(field("Name", &self.inputs[0]))
+                .child(field("Filter", &self.inputs[1]))
+                .child(field("Token", &self.inputs[2]))
+                .child(field("Locked", &self.inputs[3]))
                 .child(
-                    div().flex().flex_col().gap_2()
-                        .child(div().display(Scale::X1, window).text_color(hsla(p.accent_text)).child("FERRITE"))
-                        .child(row().child(Button::new("v1").label("Run").primary()).child(Button::new("v2").label("Step")))
-                        .child(switch("v3").label("Switch").checked(self.lib_switch).on_change(cx.listener(|this, v: &bool, _, cx| { this.lib_switch = *v; cx.notify(); })))
-                        .child(row().child(tag("live").accent()).child(tag("fault").danger())),
-                )
-                .child(
-                    div().flex().flex_col().gap_2()
-                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child("GPUI-COMPONENT"))
-                        .child(row().child(LibButton::new("l1").label("Run").primary()).child(LibButton::new("l2").label("Step")))
-                        .child(LibSwitch::new("l3").label("Switch").checked(self.lib_switch).on_click(cx.listener(|this, v: &bool, _, cx| { this.lib_switch = *v; cx.notify(); })))
-                        .child(row().child(LibTag::primary().child("LIVE")).child(LibTag::danger().child("FAULT"))),
+                    div()
+                        .body(text::SM)
+                        .text_color(hsla(p.fg_faint))
+                        .child(if name.is_empty() { "name: (empty)".to_string() } else { format!("name: {name}") }),
                 ),
         );
 
@@ -847,7 +955,8 @@ impl Render for Components {
         );
 
         let data_page = self.data_page(window, cx);
-        div()
+        let layout_page = self.layout_page(window, cx);
+        chrome::window_frame().child(div()
             .flex()
             .flex_col()
             .size_full()
@@ -861,7 +970,7 @@ impl Render for Components {
             .child(self.toaster.clone())
             .child(title_bar("Ferrite Components"))
             .child(
-                div().id("scroll").flex_1().min_h_0().overflow_y_scroll().child(
+                scroll_area("scroll").flex_1().min_h_0().child(
                     div()
                         .flex()
                         .flex_col()
@@ -871,6 +980,7 @@ impl Render for Components {
                             tabs("pages")
                                 .tab(PAGES[0])
                                 .tab(PAGES[1])
+                                .tab(PAGES[2])
                                 .selected(self.page)
                                 .on_select({
                                     let this = cx.weak_entity();
@@ -884,6 +994,7 @@ impl Render for Components {
                                 }),
                         )
                         .when(self.page == 1, |el| el.child(data_page))
+                        .when(self.page == 2, |el| el.child(layout_page))
                         .when(self.page == 0, |el| el.child(div().flex().flex_col().gap(space::ROW)
                         .child(buttons)
                         .child(div().flex().flex_row().gap(space::ROW).child(toggles).child(status))
@@ -907,7 +1018,7 @@ impl Render for Components {
                             .right(format!("CLICKS {}", self.clicks))
                             .right(format!("SCALE {:.2}x", window.scale_factor())),
                     ),
-            )
+            ))
     }
 }
 
@@ -923,8 +1034,7 @@ fn main() {
         let options = chrome::window_options("Ferrite Components", size(px(1180.), px(900.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);
-            let view = cx.new(|cx| Components::new(window, cx));
-            cx.new(|cx| Root::new(view, window, cx))
+            cx.new(|cx| Components::new(window, cx))
         })
         .expect("failed to open the components window");
         cx.activate(true);

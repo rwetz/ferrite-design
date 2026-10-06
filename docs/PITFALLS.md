@@ -1,27 +1,30 @@
 # Pitfalls — field notes from the first scaffold
 
 > Each entry bit for real while standing up `ferrite-design` and its showcase
-> (2026-10-05, Windows 11, 150% scale, gpui-pre 0.3.8, gpui-component 0.7.1).
+> (2026-10-05, Windows 11, 150% scale, gpui-pre 0.3.8). Entries 1–5 and 13–14
+> date from when Ferrite still sat on gpui-component 0.7.1; it has since
+> been removed and every component is native (COMPONENTS.md).
 > Read before SCAFFOLDING.md. Where the crate already handles it, the entry
 > says so — keep it here so nobody "simplifies" the fix away.
 
 ---
 
-## 1. gpui must be the exact build gpui-component was compiled against
+## 1. Pin gpui exactly
 
-gpui-component 0.7.1 depends on `gpui = { package = "gpui-pre", version =
-"=0.3.8" }`. If an app depends on any other gpui (the `gpui` crate on
-crates.io, a Zed git rev, a newer `gpui-pre`), it gets **two copies of gpui**
-and every API boundary fails with baffling "expected `App`, found `App`"
-errors.
-
-**Fix:** name the same package and version, and bump them together:
+Name the exact `gpui-pre` build in every Ferrite app, and the matching
+platform crate:
 
 ```toml
 gpui = { package = "gpui-pre", version = "=0.3.8" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
-gpui-component = "=0.7.1"
 ```
+
+Two copies of gpui in one build (say, `gpui` from crates.io plus
+`gpui-pre`) fail at every API boundary with "expected `App`, found `App`".
+While Ferrite depended on gpui-component this was forced on us by the
+library's own pin; now it's a choice — gpui moves fast, and Ferrite's
+components lean on its element internals — so bump deliberately and re-run
+the components example.
 
 ## 2. There is no `Application::new()` — the platform is a separate crate
 
@@ -30,28 +33,20 @@ This gpui snapshot moved platform backends out of `gpui`. Apps start with
 examples and blog posts showing `Application::new()` / `App::new()` will not
 compile.
 
-## 3. Theme colors written to the live theme get wiped on mode change — ✅ handled
+## 3. ~~Theme colors written to the live theme get wiped~~ — retired
 
-gpui-component reloads the active mode's `ThemeConfig` on every light/dark
-switch, overwriting anything set directly on `Theme::global_mut(cx)`.
+Specific to gpui-component's theme, which Ferrite no longer uses. Appearance
+is now a Ferrite global (`theme.rs`) read by every component through
+`palette(cx)`; nothing else can overwrite it.
 
-**Fix (in `theme::install`):** build a full `ThemeConfig` per palette and
-install both as `light_theme` / `dark_theme`; then mode changes keep Ferrite.
+## 4. ~~Renamed theme keys fail silently~~ — retired
 
-## 4. Renamed theme keys fail silently — ✅ tripwire
+The serde-projected theme config is gone with gpui-component. Colors only
+ever come from `tokens.rs`, so there is no second schema to drift from.
 
-gpui-component's theme schema is deserialised with serde, which ignores
-unknown keys. A key renamed in a library bump makes that widget quietly fall
-back to the library default (shadcn neutral/blue), with no error.
+## 5. ~~The theme `json!` literal needs a raised recursion limit~~ — retired
 
-**Tripwire:** `theme::tests::every_color_key_survives_the_round_trip`
-serialises the parsed config back and fails if any key we sent was dropped.
-Run `cargo test` after every gpui-component bump.
-
-## 5. The theme `json!` literal needs a raised recursion limit — ✅ handled
-
-The full config is one `serde_json::json!` literal and exceeds the default
-macro recursion limit. `lib.rs` sets `#![recursion_limit = "512"]`.
+There is no theme `json!` literal any more.
 
 ## 6. Pixel fonts blur at fractional scale — ✅ handled by `display_size`
 
@@ -105,20 +100,20 @@ title-bar click while it waits to see if it's a double-click.
 `chrome::window_options` sets it; `TitleBar` starts the move on the first
 mouse-move after a press (not on press, so children stay clickable).
 
-## 13. Install the theme before opening the window — ✅ in `init`
+## 13. Install the appearance before opening the window — ✅ in `init`
 
-gpui-component's `init` installs its own default theme (light). A window
-opened before `ferrite_design::init` paints at least one frame of it — the
-GPUI equivalent of the Nexis theme flash. Order is always:
+`ferrite_design::init` resolves the tone (dark, light, or the OS's) into a
+global before any window exists, so the first frame is already right — the
+GPUI version of Nexis's no-flash rule. Order is always:
 `ferrite_design::init(..)` → `cx.open_window(..)`.
 
-## 14. Linux resize edges and `window_border` (open)
+## 14. Linux resize edges — ✅ `chrome::window_frame` (unverified on Linux)
 
-With client decorations on Linux the app must provide resize edges.
-gpui-component's `window_border()` does, but rounds some corners with its own
-radius, which conflicts with 0px. Not yet replaced — see COMPONENTS.md. Until
-then, Linux apps either accept that or skip `window_border` and lose edge
-resizing.
+With client decorations on Linux the app must provide resize edges and a
+frame. `window_frame()` adds both — square, 1px `line_strong`, dropped on
+tiled sides — and is a plain container on Windows and macOS. Built from
+gpui's own client-decoration example; still needs a run on a real Linux
+desktop.
 
 ## 15. Windows: top 1–2px may show what's behind the window (unverified)
 
@@ -167,8 +162,8 @@ each now fixed; measured after the fix: **3.8%**, with the showcase's own
    textured quad. The cache is bounded and frees evicted textures from the
    GPU atlas (`window.drop_image`), so resizing can't leak. This is why
    `dither::Field` is plain data, not a closure: it has to be a cache key.
-3. **Unoptimised dependencies.** gpui and gpui-component are dramatically
-   slower at `opt-level = 0`. Every Ferrite app's `Cargo.toml` needs:
+3. **Unoptimised dependencies.** gpui is dramatically slower at
+   `opt-level = 0`. Every Ferrite app's `Cargo.toml` needs:
 
    ```toml
    [profile.dev.package."*"]
@@ -298,9 +293,9 @@ redraws back (§17).
 ## 30. Shortcuts need *something* focused inside your view — ✅ handled by the palette
 
 gpui dispatches a keystroke from the focused element up its ancestors.
-With **nothing** focused it goes only to the window's root view — for a
-gpui-component app that's `Root`, not your view — so an `.on_action` on your
-own root div never runs. Ctrl+Shift+P did nothing at launch, and again
+With **nothing** focused it goes only to the window's root dispatch node —
+when the app was wrapped in gpui-component's `Root`, that was the wrapper,
+not your view — so an `.on_action` on your own root div never ran. Ctrl+Shift+P did nothing at launch, and again
 after the palette closed with no previous focus to give back.
 
 `CommandPalette` now keeps a permanent focus point inside your tree: it
@@ -342,4 +337,31 @@ arrives without the button held.
 Posted wheel events are unreliable (§27), so the components example is
 split into pages with a `tabs` strip at the top — every component is
 reachable with a click from a maximized window.
+
+## 35. Builders that take `Styled`: apply the caller's style *first*
+
+A component that accepts `.w(..)`, `.flex_1()`, `.border_1()` keeps them
+in a `StyleRefinement` and copies it onto its root with
+`*root.style() = self.style`. Do that **after** setting the component's own
+layout and the assignment wipes it: `Panel` silently lost its frame and
+background whenever it was given a size, and `split` lost its flex row
+(the second pane vanished). Assign the caller's style to a bare `div()`
+first, then chain the component's own styling on top.
+
+## 36. Testing note: hit-test from logged bounds, not from screenshots
+
+Several "broken" drags were the test missing a 7px grab zone or a 10px
+scrollbar by a pixel or two — the line you see isn't always the element you
+think (the divider sat 8px left of the pane edge it looked like). When a
+pointer test fails, log the hitbox bounds once (`eprintln!` in the
+listener, run with stderr captured) and aim at those logical coordinates
+× the scale factor.
+
+## 37. Text input: bind only what the field owns
+
+`TextInput` binds editing keys in its own `FerriteInput` context and
+deliberately leaves ↑/↓, Escape and Tab unbound, so they fall through to
+whatever contains it (§25). It *does* bind Enter (→ `Submit` event): a
+container that wants Enter (the palette) must listen for that event rather
+than bind Enter itself, because the deeper binding wins.
 

@@ -2,9 +2,8 @@
 //!
 //! Every color an app paints comes from a [`Palette`]. Components never name
 //! a hex value; they ask the palette for a role (`bg`, `line`, `accent`, …).
-//! `theme.rs` projects these same values onto gpui-component's theme, so a
-//! value changed here recolors both Ferrite's own elements and every
-//! gpui-component widget at once.
+//! `theme.rs` picks which palette is on screen and every component reads it
+//! through `palette(cx)`, so a value changed here recolors everything.
 //!
 //! The rules:
 //! - **One accent.** Phosphor amber carries all identity. It marks the primary
@@ -147,7 +146,7 @@ pub fn hsla_a(hex: u32, alpha: f32) -> Hsla {
     hsla(hex).opacity(alpha)
 }
 
-/// `0xRRGGBB` → `"#rrggbb"`, the form gpui-component's theme files take.
+/// `0xRRGGBB` → `"#rrggbb"`, for exporting tokens to CSS or docs.
 pub fn css(hex: u32) -> String {
     format!("#{hex:06x}")
 }

@@ -8,8 +8,8 @@
 //!  rust-analyzer      3310     4.2%     idle
 //! ```
 //!
-//! For tens to a few hundred rows. Thousands want gpui-component's virtual
-//! table (docs/COMPONENTS.md) — this one renders every row.
+//! For tens to a few hundred rows — this one renders every row. For
+//! thousands, render rows in a [`virtual_list`](super::scroll::virtual_list).
 //!
 //! - **Sorting** is controlled: pass `.sort(Some((column, dir)))`, sort your
 //!   rows, and update in `on_sort`. Clicking a sortable header sorts by it

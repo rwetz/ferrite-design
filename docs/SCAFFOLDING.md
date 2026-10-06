@@ -33,7 +33,6 @@ ferrite-design = { git = "https://github.com/rwetz/ferrite-design" }
 # Must match ferrite-design exactly — see PITFALLS §1.
 gpui = { package = "gpui-pre", version = "=0.3.8" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
-gpui-component = "=0.7.1"
 ```
 
 And — not optional — optimise dependencies in dev builds, or gpui is
@@ -59,7 +58,6 @@ cannot rot):
 use ferrite_design::{Appearance, chrome, components::status_bar, palette, tokens::hsla};
 use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
            Subscription, Window, div, px, size};
-use gpui_component::Root;
 
 struct MyApp {
     _appearance: Subscription,
@@ -87,9 +85,8 @@ fn main() {
         cx.open_window(options, |window, cx| {
             // 3. Square corners on Windows 11.
             chrome::square_corners(window);
-            let view = cx.new(|_| MyApp { _appearance: ferrite_design::theme::follow_system(window) });
-            // 4. gpui-component's Root hosts dialogs, notifications, etc.
-            cx.new(|cx| Root::new(view, window, cx))
+            // 4. Your view is the window's root — no wrapper.
+            cx.new(|_| MyApp { _appearance: ferrite_design::theme::follow_system(window) })
         })
         .unwrap();
         cx.activate(true);
@@ -118,10 +115,9 @@ ferrite-myapp/
 - Body: `.body(text::BASE)`; it's already the theme default for widgets.
 - Texture: `dither(..)` only in the places DESIGN_LANGUAGE §5.2 allows.
 - Motion: `motion::*` only; check `motion::reduced(cx)`.
-- Widgets: native first — `components::{Button, checkbox, radio, switch,
-  tag, meter, tabs, list_item, tooltip, kbd, spinner}`. Fall back to
-  gpui-component only for what COMPONENTS.md still lists as open (inputs,
-  virtual lists, tables, docking, menus).
+- Widgets: `components::*` only — every control, overlay, input, list and
+  layout piece is native (COMPONENTS.md). Wrap the root in
+  `chrome::window_frame()` so Linux gets resize edges.
 
 ## Step 5b — A command palette (recommended)
 

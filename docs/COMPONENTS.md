@@ -2,19 +2,20 @@
 
 ## The decision
 
-**Short term:** Ferrite apps use [gpui-component](https://github.com/longbridge/gpui-kit)
-(Longbridge, Apache-2.0) for widgets, re-skinned by Ferrite's theme. It gives
-60+ working desktop components on day one: inputs with IME, lists, virtual
-tables, menus, dialogs, docking.
+**Everything is Ferrite's own.** Ferrite depends on gpui and nothing built on
+top of it — no component library, no second theme system. It started on
+[gpui-component](https://github.com/longbridge/gpui-kit) (Longbridge) as a
+stop-gap and replaced it piece by piece; the last pieces (text input,
+scrollbars, virtual list, split pane, window frame, the theme bridge and
+`Root`) went in one pass.
 
-**Long term:** Ferrite owns its components. gpui-component is a
-shadcn-shaped library; its geometry (pills, rings, padding, icon set) leaks
-through any theme, and its release cadence pins our gpui version (PITFALLS §1).
-Native components remove both constraints.
+Why it was worth it: a shadcn-shaped library's geometry (pills, rings,
+padding, icon set) leaks through any theme, its theme schema can drift under
+you (PITFALLS §4), and its release cadence pins your gpui (§1).
 
-This is a migration, not a rewrite: replace one component at a time, starting
-where the library fights the language hardest, and keep apps working at every
-step.
+Behaviour that was hard-won in gpui-component (focus handling, keyboard
+activation, overlay dismissal, the title bar's platform quirks) was ported,
+not reinvented — see the module docs for what came from where.
 
 ## What's already native
 
@@ -40,6 +41,11 @@ See every one of them live: `cargo run --example components`.
 | **`slider`** | `components::slider` | discrete LED-cell track snapped to `step`, tall thumb cell, fixed-width readout; drag with pointer capture, arrows/PageUp/Home/End |
 | **`tree`** | `components::tree` | 1px connector guides (├ └ │), chevrons, owns its expansion; →/← expand, collapse, step in/out |
 | **`table`** | `components::table` | display-face header with ▲/▼ sort marks, right-aligned numeric columns, row selection; for up to a few hundred rows |
+| **`TextInput`** | `components::input` | single-line field on gpui's `EntityInputHandler` (IME, dead keys), grapheme/word motion, undo/redo, mouse select (double/triple click), horizontal scroll, `.masked()`, `.prompt(">")`; `Change` / `Submit` events |
+| **`scrollbar` / `scroll_area`** | `components::scroll` | square thumb on a hairline track, drag (pointer captured) or click-to-jump; reads the offset at paint time |
+| **`virtual_list`** | `components::scroll` | renders only visible rows (gpui `uniform_list`), with the Ferrite scrollbar |
+| **`split`** | `components::split` | draggable 1px divider, fraction state, min sizes, double-click resets |
+| **`window_frame`** | `chrome` | Linux client-decoration frame + resize edges; passthrough elsewhere |
 | **`Icon`** | `icon` | 21 pixel icons on the type grid; `fit()` for fixed-height controls |
 | **`spinner` / `cursor` / `ticker`** | `components::ticker` | timer-driven periodic state (no per-frame redraws) |
 | `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing |
@@ -58,25 +64,26 @@ role/label/toggled state.
 - gpui has no focus scope, so a `dialog` can't trap Tab: it can walk out to
   elements behind the backdrop (which still can't be clicked).
 
-## Replacement order
+## Replacement log
 
-| # | gpui-component piece | Status |
+| # | gpui-component piece | Ferrite replacement |
 |---|---|---|
-| 1 | `window_border` (Linux CSD) | **open** — needs verifying on Linux; rounds corners today |
-| 2 | `Button` | ✅ native |
-| 3 | `Switch` / `Checkbox` / `Radio` | ✅ native |
-| 4 | `Tag` / `Badge` | ✅ native (+ `meter`) |
-| 5 | `Tooltip` / `Popover` / menus | ✅ native — tooltip, popover, dropdown + context menu with submenus |
-| 6 | `Tab` / `TabBar` | ✅ native (+ `list_item`) |
-| 7 | `Input` | **last, if ever** — IME, selection, undo |
-| 8 | `Dialog` / `Slider` / `Tree` / small `Table` | ✅ native (+ `segmented`) |
-| — | `VirtualList`, virtual `Table`, `Dock`, `Resizable` | keep wrapping; put `list_item` rows inside the library's virtual list |
+| 1 | `window_border` (Linux CSD) | `chrome::window_frame` — square frame + resize edges (unverified on Linux) |
+| 2 | `Button` | `Button` |
+| 3 | `Switch` / `Checkbox` / `Radio` | `switch` / `checkbox` / `radio` |
+| 4 | `Tag` / `Badge` | `tag` (+ `meter`) |
+| 5 | `Tooltip` / `Popover` / menus | `tooltip`, `popover`, `dropdown_menu` / `context_menu` + `submenu` |
+| 6 | `Tab` / `TabBar` | `tabs` (+ `list_item`) |
+| 7 | `Input` | `TextInput` — gpui's own IME plumbing, undo, word motion, mask |
+| 8 | `Dialog` / `Slider` / `Tree` / `Table` | `dialog`, `slider`, `tree`, `table` (+ `segmented`) |
+| 9 | `Scrollbar` / `Scrollable` | `scrollbar`, `scroll_area` |
+| 10 | `VirtualList` / virtual table | `virtual_list` (gpui's `uniform_list` + Ferrite scrollbar) |
+| 11 | `Resizable` | `split` |
+| 12 | `Notification` | `Toaster` / `toast` |
+| 13 | `Root` + `ThemeConfig` | nothing — your view is the window root; `theme.rs` owns appearance |
 
-The overlay set is complete. Next up: **`window_border`** once there's a
-Linux machine to verify it on.
-
-Inputs, virtualised lists and docking are where a component library earns its
-keep. Replacing them is not a goal in itself.
+Not replaced because Ferrite never used them: docking, charts, the code
+editor, date pickers. Build them natively when an app needs one.
 
 ## Rules for writing a native component
 
@@ -84,9 +91,9 @@ keep. Replacing them is not a goal in itself.
 2. **Display text through `.display(Scale, window)`**, body through
    `.body(size)`. Never raw font sizes on the display face.
 3. **0px radius, no shadow.** Depth via surface steps and 1px lines.
-4. **Builder API** matching gpui-component's shape where one exists
-   (`Button::new(id).label(..).primary()`), so swapping an import is the
-   whole migration for app code.
+4. **Builder API** in the established shape (`Button::new(id).label(..)
+   .primary()`), and if it takes `Styled`, apply the caller's style first
+   (PITFALLS §35).
 5. **Stepped or instant motion** from `motion::*`; honour `motion::reduced`.
 6. **Interactive ⇒ stable `ElementId` + visible focus** (1px accent).
 7. **Ship it in the showcase** in the same commit, next to the

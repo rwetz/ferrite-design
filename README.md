@@ -31,6 +31,10 @@ window chrome, and the rules that hold them together.
 | ![A destructive confirm dialog](docs/img/components-dialog.png) |
 | --- |
 
+![Text input — native IME, undo, word motion, password mask](docs/img/components-input.png)
+
+![Split pane, scroll area and a 10,000-row virtual list with Ferrite scrollbars](docs/img/components-layout.png)
+
 ## Scope
 
 **For:** native desktop apps built on [GPUI](https://gpui.rs) (Rust,
@@ -52,13 +56,13 @@ gradients, stepped motion. The side-by-side is in
 | Module | |
 |---|---|
 | `tokens` | The Iron (dark) and Paper (light) palettes, type scale, spacing grid. Contrast is enforced by tests. |
-| `theme` | Projects the palettes onto gpui-component's theme; appearance switching and follow-system. |
+| `theme` | Which palette is on screen: appearance preference, switching, follow-system. |
 | `fonts` | Embedded PxPlus IBM VGA 8×16 (display) + JetBrains Mono (body), and device-pixel snapping for the pixel face. |
 | `dither` | 4×4 Bayer ordered dither as an element: flat, ramp, radial. Device-pixel cells, rasterised once and cached. |
 | `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
 | `motion` | Stepped motion vocabulary, blink, reduced-motion check. |
-| `chrome` | Window options, square corners on Windows 11, and Ferrite's own `TitleBar`. |
-| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `submenu`, `CommandPalette`, `Toaster`, `dialog`, `segmented`, `slider`, `tree`, `table` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
+| `chrome` | Window options, square corners on Windows 11, Ferrite's own `TitleBar`, and `window_frame` (Linux resize edges). |
+| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `submenu`, `CommandPalette`, `Toaster`, `dialog`, `segmented`, `slider`, `tree`, `table`, `TextInput`, `scroll_area`, `scrollbar`, `virtual_list`, `split` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
 | `icon` | 21 pixel icons drawn on the display font's grid; they never fall back to a system font. |
 | `fuzzy` | The palette's matcher: exact best-alignment scoring (word starts, runs, gaps) with match positions. |
 
@@ -69,7 +73,6 @@ gradients, stepped motion. The side-by-side is in
 ferrite-design = { git = "https://github.com/rwetz/ferrite-design" }
 gpui = { package = "gpui-pre", version = "=0.3.8" }            # must match exactly
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
-gpui-component = "=0.7.1"
 
 [profile.dev.package."*"]
 opt-level = 3      # gpui is sluggish unoptimised — see PITFALLS §17
@@ -81,8 +84,7 @@ gpui_platform::application().run(|cx: &mut App| {
     let options = chrome::window_options("My App", size(px(1200.), px(800.)), cx);
     cx.open_window(options, |window, cx| {
         chrome::square_corners(window);
-        let view = cx.new(|_| MyApp::new());
-        cx.new(|cx| Root::new(view, window, cx))
+        cx.new(|_| MyApp::new())                         // your view is the root
     }).unwrap();
 });
 ```
@@ -94,7 +96,7 @@ cargo run --example showcase                       # every primitive, Iron
 FERRITE_APPEARANCE=light cargo run --example showcase   # Paper
 cargo run --example components                     # every native component, live
 cargo run --example minimal                        # the scaffolding guide's app
-cargo test                                         # palette/schema/dither tripwires
+cargo test                                         # palette/dither/input/layout tripwires
 ```
 
 ## Docs
@@ -103,17 +105,15 @@ cargo test                                         # palette/schema/dither tripw
   space, texture, motion, chrome, and the family checklist.
 - [SCAFFOLDING.md](docs/SCAFFOLDING.md) — new app, step by step.
 - [PITFALLS.md](docs/PITFALLS.md) — field notes; read before scaffolding.
-- [COMPONENTS.md](docs/COMPONENTS.md) — gpui-component today, the plan to
+- [COMPONENTS.md](docs/COMPONENTS.md) — every native component, and what each one replaced; was: the plan to
   replace it with native Ferrite components.
 
-## Components: native first, gpui-component for the heavy parts
+## Components: all native
 
-Everyday controls, popovers, menus, the command palette, toasts, dialogs,
-sliders, trees and small tables are native Ferrite components.
-Text inputs, virtual lists and tables, and docking still come from
-[gpui-component](https://github.com/longbridge/gpui-kit), re-skinned by
-Ferrite's theme, and are being replaced one at a time. Status, order and
-rules: [COMPONENTS.md](docs/COMPONENTS.md).
+Every component is Ferrite's own — controls, overlays, the command palette,
+toasts, dialogs, the text input, scrollbars, virtual lists, split panes,
+trees and tables. The crate depends on gpui and nothing built on it. Status
+and the replacement log: [COMPONENTS.md](docs/COMPONENTS.md).
 
 ## License
 

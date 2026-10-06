@@ -4,7 +4,7 @@
 //! `▌ name.rs                    12 KB` — a 2px amber bar marks the
 //! selected row (with an `accent_dim` wash), hover lifts to `raised`.
 //! Optional leading glyph, trailing meta in dim body type. Rows don't own
-//! scrolling or virtualisation: put them in gpui-component's virtual list
+//! scrolling or virtualisation: put them in `virtual_list`
 //! for long lists (docs/COMPONENTS.md keeps that wrapped).
 
 use std::rc::Rc;

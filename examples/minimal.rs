@@ -9,7 +9,6 @@
 use ferrite_design::{Appearance, chrome, components::status_bar, palette, tokens::hsla};
 use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
            Subscription, Window, div, px, size};
-use gpui_component::Root;
 
 struct MyApp {
     _appearance: Subscription,
@@ -37,9 +36,8 @@ fn main() {
         cx.open_window(options, |window, cx| {
             // 3. Square corners on Windows 11.
             chrome::square_corners(window);
-            let view = cx.new(|_| MyApp { _appearance: ferrite_design::theme::follow_system(window) });
-            // 4. gpui-component's Root hosts dialogs, notifications, etc.
-            cx.new(|cx| Root::new(view, window, cx))
+            // 4. Your view is the window's root — no wrapper needed.
+            cx.new(|_| MyApp { _appearance: ferrite_design::theme::follow_system(window) })
         })
         .unwrap();
         cx.activate(true);

@@ -27,8 +27,9 @@
 //!   on the next tick (`window.defer`), so a handler may freely update any
 //!   entity — including the palette.
 //!
-//! The text field is gpui-component's `Input` (IME, selection, undo) drawn
-//! borderless; everything around it is Ferrite.
+//! The text field is Ferrite's own [`TextInput`](super::input::TextInput),
+//! drawn borderless. It binds Enter (→ `Submit`) but leaves ↑/↓ and Escape
+//! unbound, so they fall through to the palette's own bindings.
 
 use std::rc::Rc;
 
@@ -38,7 +39,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, StyledText, Subscription, Window, actions, anchored,
     deferred, div, point, prelude::FluentBuilder as _, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use super::input::{InputEvent, TextInput};
 
 use super::overlay::{scrim, surface};
 use super::tooltip::kbd;
@@ -167,7 +168,7 @@ fn build_rows(commands: &[PaletteCommand], query: &str) -> Vec<Row> {
 /// The palette. Create once per window, render it as a child of the root
 /// view (it draws nothing while closed), and open it from an action.
 pub struct CommandPalette {
-    input: Entity<InputState>,
+    input: Entity<TextInput>,
     commands: Vec<PaletteCommand>,
     rows: Vec<Row>,
     /// Index into `rows` of the highlighted item.
@@ -183,14 +184,12 @@ pub struct CommandPalette {
 
 impl CommandPalette {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Type a command…"));
+        let input = cx.new(|cx| TextInput::new(window, cx).placeholder("Type a command…").bordered(false));
         let subscriptions = vec![cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| match event {
             InputEvent::Change => this.refilter(cx),
-            // Belt and braces: if a future input consumes the Enter binding,
-            // its PressEnter event still runs the command. `confirm` is
-            // idempotent, so both arriving is harmless.
-            InputEvent::PressEnter { .. } => this.confirm(&Confirm, window, cx),
-            _ => {}
+            // The field binds Enter itself, so the palette's Confirm binding
+            // never sees it; run the command from the field's Submit instead.
+            InputEvent::Submit => this.confirm(&Confirm, window, cx),
         })];
         // With nothing focused, gpui sends keystrokes only to the window's
         // root view — not to the app's own root, where `TogglePalette` is
@@ -230,7 +229,7 @@ impl CommandPalette {
         self.previous_focus = window.focused(cx);
         self.open = true;
         self.input.update(cx, |input, cx| {
-            input.set_value("", window, cx);
+            input.set_value("", cx);
             input.focus(window, cx);
         });
         self.refilter(cx);
@@ -425,7 +424,7 @@ impl Render for CommandPalette {
                     .h(px(44.))
                     .px_3()
                     .child(div().display(Scale::X1, window).text_color(hsla(p.accent)).child(">"))
-                    .child(div().flex_1().body(text::LG).child(Input::new(&self.input).appearance(false).aria_label("Command")))
+                    .child(div().flex_1().body(text::LG).child(self.input.clone()))
                     .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(format!("{shown}/{total}"))),
             )
             .child(div().h(px(1.)).bg(hsla(p.line_strong)))
