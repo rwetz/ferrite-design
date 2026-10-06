@@ -413,3 +413,12 @@ bundles the compiler. The build fails in `gpui-pre-apple`'s build script
 with "missing Metal Toolchain". One-time fix per machine (~840 MB):
 
     xcodebuild -downloadComponent MetalToolchain
+
+## 43. macOS: text sized to an exact cell count wraps — ✅ handled
+
+CoreText reports PxPlus advances a hair over a whole cell (8.000001px at
+16px), so text in a box exactly N cells wide shapes slightly wider than the
+box and wraps — the switch's `OFF` became `OF`/`F`. DirectWrite lands on or
+under the cell, so Windows never shows it. The switch readout sets
+`whitespace_nowrap` on macOS. Anything else sized to an exact number of
+display cells needs the same treatment there.
