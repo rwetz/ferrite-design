@@ -13,6 +13,7 @@ pub mod palette;
 pub mod tabs;
 pub mod tag;
 pub mod ticker;
+pub mod toast;
 pub mod toggle;
 pub mod tooltip;
 
@@ -25,6 +26,7 @@ pub use tabs::{Tabs, tabs};
 pub use tag::{Meter, Tag, meter, tag};
 pub use toggle::{Switch, Toggle, checkbox, radio, switch};
 pub use ticker::{Cursor, Spinner, cursor, spinner, ticker};
+pub use toast::{Toast, ToastId, ToastKind, Toaster, toast};
 pub use tooltip::{Kbd, Tooltip, kbd, tooltip};
 
 use gpui::{

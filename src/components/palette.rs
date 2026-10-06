@@ -51,6 +51,10 @@ use crate::tokens::{hsla, text};
 
 actions!(ferrite_palette, [SelectPrev, SelectNext, Confirm, Dismiss, TogglePalette]);
 
+/// Scrim density: 11 of every 16 cells inked in the page color (~69%), so
+/// the app behind reads as present but clearly out of play.
+const SCRIM: f32 = 0.6875;
+
 /// The key context the palette's bindings live in.
 pub const CONTEXT: &str = "FerritePalette";
 
@@ -432,7 +436,7 @@ impl Render for CommandPalette {
                     .child(hint(&["Esc"], "close")),
             );
 
-        // Full-window layer: a screen-door scrim (the app half-dithered into
+        // Full-window layer: a screen-door scrim (the app ~69% dithered into
         // the page color), then the panel near the top.
         deferred(
             anchored().position(point(px(0.), px(0.))).child(
@@ -452,7 +456,7 @@ impl Render for CommandPalette {
                             .absolute()
                             .inset_0()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.close(window, cx)))
-                            .child(dither(dither::flat(dither::level::MEDIUM)).ink(hsla(p.bg)).size_full()),
+                            .child(dither(dither::flat(SCRIM)).ink(hsla(p.bg)).size_full()),
                     )
                     .child(
                         div()

@@ -155,6 +155,25 @@ cx.bind_keys([KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
 Also give it a clickable entry point (a title-bar or toolbar button). The
 components example has the full version.
 
+## Step 5c — Toasts
+
+One `Toaster` per window, hosted next to the palette:
+
+```rust
+use ferrite_design::components::{Toaster, toast};
+
+let toaster = cx.new(|_| Toaster::new());          // in the constructor
+div().child(self.toaster.clone())                   // in render
+
+self.toaster.update(cx, |t, cx| {
+    t.push(toast("Deployed").success().message("staging · build 4412")
+        .action("Undo", |window, cx| { /* … */ }), cx);
+});
+```
+
+Use `.sticky()` for things the user must act on; everything else expires
+(4s info/success, 6s warning, 8s danger).
+
 ## Step 6 — Run
 
 ```bash

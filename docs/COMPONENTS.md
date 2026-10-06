@@ -34,6 +34,7 @@ See every one of them live: `cargo run --example components`.
 | **`popover`** | `components::overlay` | non-modal panel under a trigger, `[ TITLE ]` header, hard dithered drop shadow |
 | **`dropdown_menu` / `context_menu`** | `components::menu` | icons, shortcuts, check toggles, section labels, separators, danger + disabled rows; full keyboard nav |
 | **`CommandPalette`** | `components::palette` | modal, fuzzy-ranked (`fuzzy`), grouped when empty, amber match highlights, screen-door scrim; wraps gpui-component's `Input` for the text field |
+| **`Toaster` / `toast`** | `components::toast` | bottom-right stack of up to 4; info/success/warning/danger with pixel icon + `INFO OK WARN ERR` code; stepped 16-segment countdown, paused on hover; dither materialise on entry; optional action; sticky |
 | **`Icon`** | `icon` | 21 pixel icons on the type grid; `fit()` for fixed-height controls |
 | **`spinner` / `cursor` / `ticker`** | `components::ticker` | timer-driven periodic state (no per-frame redraws) |
 | `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing |
@@ -63,8 +64,7 @@ aren't told they're disabled.
 | — | `List`, `Table`, `VirtualList`, `Dock`, `Resizable` | keep wrapping; put `list_item` rows inside the library's virtual list |
 
 Next up: **`window_border`** once there's a Linux machine to verify it on,
-**submenus**, and **toasts** (non-modal notifications, the last overlay
-type).
+and **submenus**.
 
 Inputs, virtualised lists and docking are where a component library earns its
 keep. Replacing them is not a goal in itself.

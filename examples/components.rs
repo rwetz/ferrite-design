@@ -14,7 +14,7 @@ use ferrite_design::{
     chrome::{self, title_bar},
     components::{
         Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, kbd, list_item, menu_item,
-        meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, tooltip,
+        meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
     },
     icon::icon,
     motion, palette, theme,
@@ -59,6 +59,7 @@ struct Components {
     only_mine: bool,
     compact: bool,
     palette: Entity<CommandPalette>,
+    toaster: Entity<Toaster>,
     _appearance: Subscription,
 }
 
@@ -94,6 +95,7 @@ impl Components {
             only_mine: false,
             compact: false,
             palette: Self::build_palette(window, cx),
+            toaster: cx.new(|_| Toaster::new()),
             _appearance: theme::follow_system(window),
         }
     }
@@ -143,8 +145,14 @@ impl Components {
             theme_cmd("Theme: Follow system", Appearance::System, Icon::Sliders),
             command("Git: Stage all").group("Git").icon(Icon::Plus).on_run(on(|v, _, cx| v.log("STAGED", cx))),
             command("Git: Commit").group("Git").icon(Icon::Check).shortcut("Ctrl+Enter").on_run(on(|v, _, cx| v.log("COMMITTED", cx))),
-            command("Git: Push").group("Git").icon(Icon::Up).keywords(["upload", "publish"]).on_run(on(|v, _, cx| v.log("PUSHED", cx))),
-            command("Git: Pull").group("Git").icon(Icon::Down).keywords(["fetch", "sync"]).on_run(on(|v, _, cx| v.log("PULLED", cx))),
+            command("Git: Push").group("Git").icon(Icon::Up).keywords(["upload", "publish"]).on_run(on(|v, _, cx| {
+                v.log("PUSHED", cx);
+                v.notify(toast("Pushed to origin/main").success().message("3 commits · 1ebd035..a41f9c2"), cx);
+            })),
+            command("Git: Pull").group("Git").icon(Icon::Down).keywords(["fetch", "sync"]).on_run(on(|v, _, cx| {
+                v.log("PULL FAILED", cx);
+                v.notify(toast("Pull failed").danger().message("merge conflict in src/tokens.rs"), cx);
+            })),
             command("Search docs").group("Help").icon(Icon::Search).on_run(on(|v, _, cx| v.log("DOCS", cx))),
             command("Report an issue").group("Help").icon(Icon::Warning).keywords(["bug"]).on_run(on(|v, _, cx| v.log("REPORT", cx))),
         ];
@@ -153,6 +161,10 @@ impl Components {
             palette.set_commands(commands, cx);
             palette
         })
+    }
+
+    fn notify(&mut self, toast: Toast, cx: &mut Context<Self>) {
+        self.toaster.update(cx, |t, cx| t.push(toast, cx));
     }
 
     fn log(&mut self, what: impl Into<SharedString>, cx: &mut Context<Self>) {
@@ -174,6 +186,13 @@ impl Components {
             let _ = this.update(cx, |this, cx| {
                 this.deploying = false;
                 this.log("DEPLOYED", cx);
+                let undo = cx.weak_entity();
+                this.notify(
+                    toast("Deployed").success().message("staging · build 4412 · 2.0s").action("Undo", move |_, cx| {
+                        let _ = undo.update(cx, |v, cx| v.log("ROLLED BACK", cx));
+                    }),
+                    cx,
+                );
             });
         })
         .detach();
@@ -441,7 +460,7 @@ impl Render for Components {
                     .text_color(hsla(p.fg_dim))
                     .child("RIGHT-CLICK HERE"),
             );
-        let overlays = panel("Overlays").meta("popover · menu · context menu").child(
+        let overlays = panel("Overlays").meta("popover · menu · palette · toast").child(
             div()
                 .flex()
                 .flex_col()
@@ -455,6 +474,26 @@ impl Render for Components {
                         move |_, window, cx| palette.update(cx, |p, cx| p.open(window, cx))
                     }),
                 ))
+                .child(section("toasts", window, cx))
+                .child({
+                    let this = cx.weak_entity();
+                    let push = move |id: &'static str, label: &'static str, t: fn() -> Toast| {
+                        let this = this.clone();
+                        Button::new(id).label(label).small().secondary().on_click(move |_, _, cx| {
+                            let _ = this.update(cx, |v, cx| v.notify(t(), cx));
+                        })
+                    };
+                    row()
+                        .child(push("toast-info", "Info", || toast("Indexing workspace").message("1,204 files · rust-analyzer")))
+                        .child(push("toast-ok", "Success", || toast("Saved").success().message("tokens.rs · 7.4 KB")))
+                        .child(push("toast-warn", "Warning", || toast("Disk almost full").warning().message("92% of C: used")))
+                        .child(push("toast-err", "Error", || {
+                            toast("Build failed").danger().message("error[E0308]: mismatched types").action("Retry", |_, _| {})
+                        }))
+                        .child(push("toast-sticky", "Sticky", || {
+                            toast("Update ready").message("Ferrite 0.2 · restart to apply").sticky().action("Restart", |_, _| {})
+                        }))
+                })
                 .child(section("context menu", window, cx))
                 .child(ctx_area),
         );
@@ -484,6 +523,7 @@ impl Render for Components {
                 this.palette.update(cx, |p, cx| p.toggle(window, cx));
             }))
             .child(self.palette.clone())
+            .child(self.toaster.clone())
             .child(title_bar("Ferrite Components"))
             .child(
                 div().id("scroll").flex_1().min_h_0().overflow_y_scroll().child(

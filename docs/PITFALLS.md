@@ -279,3 +279,19 @@ update and panics. Close first, then run the handler on the next tick with
 - Sent `WM_MOUSEWHEEL` sometimes takes a couple of rounds after launch
   before gpui scrolls. Send in batches and re-check with a capture.
 
+## 28. A child's `.occlude()` hides the pointer from its parent's hover
+
+Occlusion blocks every hitbox *below* it — including the parent's own.
+Put `.occlude()` on each toast and the stack's `on_hover` never fires, so
+"pause while pointed at" silently does nothing. Occlude the container that
+needs the hover, not its children; the children's hitboxes sit above it and
+still get clicks.
+
+## 29. Timers for transient UI: run only while there's something to time
+
+The toast stack ticks every `motion::FRAME` *only while a toast is on
+screen*, stops itself when the stack empties, and calls `cx.notify()` only
+when something visible changed (a countdown segment, an entry frame, a
+removal). An always-on timer or a notify on every tick would put idle
+redraws back (§17).
+
