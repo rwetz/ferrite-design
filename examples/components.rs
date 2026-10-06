@@ -101,6 +101,12 @@ struct Components {
     series_seed: u64,
     /// Built once: the develop demo's picture.
     orb: dither::Picture,
+    scenes: Vec<(&'static str, dither::Picture)>,
+    art_scene: usize,
+    art_fit: usize,
+    art_contrast: usize,
+    art_invert: bool,
+    art_diffuse: bool,
     _input_subs: Vec<Subscription>,
     word_wrap: bool,
     show_hidden: bool,
@@ -195,6 +201,18 @@ impl Components {
             alerts: [true; 3],
             series_seed: 0,
             orb: dither::Picture::from_fn(240, 160, orb_scene),
+            scenes: vec![
+                ("Orb", dither::Picture::from_fn(720, 480, orb_scene)),
+                ("Fractal", dither::Picture::from_fn(720, 480, fractal_scene)),
+                ("Planet", dither::Picture::from_fn(720, 480, planet_scene)),
+                ("Waves", dither::Picture::from_fn(720, 480, wave_scene)),
+                ("Type", dither::Picture::from_fn(720, 480, type_scene)),
+            ],
+            art_scene: 0,
+            art_fit: 0,
+            art_contrast: 0,
+            art_invert: false,
+            art_diffuse: false,
             _input_subs: input_subs,
             word_wrap: true,
             show_hidden: false,
@@ -1302,6 +1320,79 @@ impl Components {
     }
 
 
+    fn art_section(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        let note = |t: &'static str| div().body(text::SM).text_color(hsla(p.fg_dim)).child(t);
+        let picture = self.scenes[self.art_scene].1.clone();
+        let fit = [None, Some(ascii::Fit::Tone), Some(ascii::Fit::Shape)][self.art_fit];
+        let contrast = [1., 1.5, 2.2][self.art_contrast];
+        let (invert, diffuse) = (self.art_invert, self.art_diffuse);
+        let art = move |charset: ascii::Charset, cols: usize| {
+            let a = ascii_art(picture.clone()).cols(cols).charset(charset).contrast(contrast).invert(invert).diffuse(diffuse);
+            match fit {
+                Some(f) => a.fit(f),
+                None => a,
+            }
+        };
+        let this = cx.weak_entity();
+        let set = move |f: fn(&mut Components, usize)| {
+            let this = this.clone();
+            move |i: &usize, _: &mut Window, cx: &mut App| {
+                let i = *i;
+                let _ = this.update(cx, |v, cx| {
+                    f(v, i);
+                    cx.notify();
+                });
+            }
+        };
+        let label = |t: &'static str| div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(t);
+        let controls = div()
+            .flex()
+            .flex_row()
+            .flex_wrap()
+            .items_center()
+            .gap_3()
+            .child(label("SCENE"))
+            .child(self.scenes.iter().fold(segmented("art-scene"), |s, (n, _)| s.option(*n)).selected(self.art_scene).on_select(set(|v, i| v.art_scene = i)))
+            .child(label("FIT"))
+            .child(segmented("art-fit").option("Auto").option("Tone").option("Shape").selected(self.art_fit).on_select(set(|v, i| v.art_fit = i)))
+            .child(label("CONTRAST"))
+            .child(segmented("art-contrast").option("1×").option("1.5×").option("2.2×").selected(self.art_contrast).on_select(set(|v, i| v.art_contrast = i)))
+            .child(checkbox("art-invert").label("Invert").checked(self.art_invert).on_change(cx.listener(|v, on: &bool, _, cx| {
+                v.art_invert = *on;
+                cx.notify();
+            })))
+            .child(checkbox("art-diffuse").label("Diffuse (tone)").checked(self.art_diffuse).on_change(cx.listener(|v, on: &bool, _, cx| {
+                v.art_diffuse = *on;
+                cx.notify();
+            })));
+
+        let hero = ascii_box()
+            .title("best character · 150 columns")
+            .ink(hsla(p.accent))
+            .child(div().flex().justify_center().child(art(ascii::Charset::Full, 150).color(hsla(p.accent_text))))
+            .child(note("Charset::Full, shape fit: every cell is compared with the face's ~200 text glyphs — their real 8×16 pixels, softened the way the eye sees them — and takes the closest in shape and ink. Edges pick their stroke: / | _ ( ; the shading picks its density."));
+
+        let cell = ferrite_design::fonts::display_size(Scale::X1, window) / 2.;
+        let tiles = ascii::Charset::ALL.iter().filter(|c| **c != ascii::Charset::Full).map(|c| {
+            let sample: String = c.chars().chars().skip(1).take(18).collect();
+            ascii_box()
+                .title(c.name())
+                .w(cell * 76. + px(2.))
+                .child(art(*c, 72))
+                .child(div().display(Scale::X1, window).text_color(hsla(p.fg_faint)).whitespace_nowrap().child(sample))
+        });
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(space::ROW)
+            .child(note("ascii_art(picture).charset(..): any set of the face's glyphs, fitted by tone (density ramp, sorted from the real pixels) or by shape (best 4×8 match). Results are cached per picture and style."))
+            .child(controls)
+            .child(hero)
+            .child(div().flex().flex_row().flex_wrap().gap(space::ROW).children(tiles))
+    }
+
     fn ascii_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
         let p = palette(cx);
         let replay = self.replay[22];
@@ -1449,12 +1540,7 @@ impl Components {
         let today = Date::today();
         let cal = ascii_box().title("cal").style(ascii::DOUBLE_H).child(ascii_cal(today.year, today.month).today(Some(today.day)));
 
-        let art = div()
-            .flex()
-            .flex_row()
-            .gap(space::ROW)
-            .child(ascii_box().title("ascii_art · classic").flex_1().child(ascii_art(self.orb.clone()).cols(54).color(hsla(p.accent_text))))
-            .child(ascii_box().title("ascii_art · bubbles").flex_1().child(ascii_art(self.orb.clone()).cols(54).ramp(&ascii::BUBBLES)));
+        let art = self.art_section(window, cx);
 
         let mono = |t: String| div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).whitespace_nowrap().child(t);
         let clip = ascii::frame(&["ferrite-design 0.1", "10 schemes · 60 components", "copy me anywhere"], ascii::PLAIN, Some("about"));
@@ -2029,6 +2115,75 @@ impl Render for Components {
 /// The display face at its crisp 1× size, for elements styled by hand.
 fn fonts_x1(window: &Window) -> gpui::Pixels {
     ferrite_design::fonts::display_size(Scale::X1, window)
+}
+
+/// A fractal: the Mandelbrot set, smooth escape time (3:2).
+fn fractal_scene(u: f32, v: f32) -> f32 {
+    let (cx, cy) = (-2.25 + u * 3.0, -1.0 + v * 2.0);
+    let (mut x, mut y, mut i) = (0f32, 0f32, 0);
+    const MAX: i32 = 96;
+    while i < MAX && x * x + y * y < 64. {
+        let t = x * x - y * y + cx;
+        y = 2. * x * y + cy;
+        x = t;
+        i += 1;
+    }
+    if i == MAX {
+        // Inside: banded by where the orbit settles, so the set has texture.
+        return 0.8 + 0.12 * ((x * x + y * y).sqrt() * 7.).sin();
+    }
+    let smooth = i as f32 + 1. - ((x * x + y * y).ln().ln() / std::f32::consts::LN_2);
+    // Fast escapes stay paper; the filaments near the set carry the ink.
+    ((smooth - 7.) / (MAX as f32 - 7.)).clamp(0., 1.).powf(0.5)
+}
+
+/// A ringed planet, lit from the upper left, on a field of stars (3:2).
+fn planet_scene(u: f32, v: f32) -> f32 {
+    let (x, y) = ((u - 0.5) * 1.5, v - 0.5);
+    // The ring: a tilted ellipse band.
+    let (rx, ry) = (x * 0.94 + y * 0.34, -x * 0.34 + y * 0.94);
+    let e = (rx / 0.46).powi(2) + (ry / 0.12).powi(2);
+    let ring = (0.72..1.0).contains(&e) && !(0.84..0.88).contains(&e);
+    let r2 = x * x + y * y;
+    let body = r2 < 0.27 * 0.27;
+    if ring && (ry > 0. || !body) {
+        return 0.55 + 0.35 * (e * 30.).sin().abs();
+    }
+    if body {
+        let z = (0.27 * 0.27 - r2).sqrt() / 0.27;
+        let (nx, ny) = (x / 0.27, y / 0.27);
+        let light = (-0.55 * nx - 0.6 * ny + 0.58 * z).max(0.);
+        let bands = 0.15 * (ny * 14. + nx * 2.).sin();
+        return (light * 0.9 + bands + 0.05).clamp(0., 1.);
+    }
+    // Stars: a sparse hash.
+    let (sx, sy) = ((u * 180.) as u32, (v * 120.) as u32);
+    let h = sx.wrapping_mul(73_856_093) ^ sy.wrapping_mul(19_349_663);
+    if h % 97 == 0 { 0.8 } else { 0. }
+}
+
+/// Two point sources interfering (3:2).
+fn wave_scene(u: f32, v: f32) -> f32 {
+    let (x, y) = (u * 1.5, v);
+    let d1 = ((x - 0.45).powi(2) + (y - 0.35).powi(2)).sqrt();
+    let d2 = ((x - 1.05).powi(2) + (y - 0.65).powi(2)).sqrt();
+    0.5 + 0.25 * (d1 * 48.).sin() + 0.25 * (d2 * 48.).sin()
+}
+
+/// FERRITE in the banner font, slanted so its stems run diagonal (3:2).
+fn type_scene(u: f32, v: f32) -> f32 {
+    use std::sync::OnceLock;
+    static GRID: OnceLock<(usize, Vec<(usize, usize)>)> = OnceLock::new();
+    let (w, lit) = GRID.get_or_init(|| ferrite_design::components::textmode::banner_pixels("FERRITE"));
+    // Font pixels 2.5 units tall, so the word fills the frame.
+    let (gw, gh) = (*w as f32 + 4., 18.);
+    let gy = v * gh - 2.75;
+    let gx = u * gw - 2. + (gy - 6.25) * 0.3;
+    let (cx, cy) = (gx.floor(), (gy / 2.5).floor());
+    if cx < 0. || cy < 0. {
+        return 0.;
+    }
+    if lit.contains(&(cx as usize, cy as usize)) { 1. } else { 0. }
 }
 
 /// A lit orb, as levels: the develop demo's picture (3:2).

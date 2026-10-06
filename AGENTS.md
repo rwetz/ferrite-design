@@ -235,6 +235,8 @@ sparkline(values).size(px(120.), px(20.))      heatmap(rows_0_to_1).row_labels([
 // Text mode (ASCII) — one framing style per screen: these, or panel()
 ascii_box().title("System").double().ink(hsla(p.accent)).child(..)    ascii_rule(Some("logs")).double()
 banner(id, "FERRITE").shadow()    ascii_art(picture).cols(48).ramp(&ascii::BUBBLES)    ascii_gauge(0.42).label("cpu").cells(12)
+ascii_art(picture).cols(120).charset(ascii::Charset::Full).fit(ascii::Fit::Shape).contrast(1.5).invert(false).diffuse(false)
+// Charset: Classic Punctuation Slashes Lines Accents Letters Digits Binary Greek Box Blocks Symbols Full (best character)
 ascii_box().style(ascii::DOUBLE_H).shadow().draw_on(id, key)      // styles: SINGLE DOUBLE DOUBLE_H DOUBLE_V PLAIN
 ascii_table().header(["name", "pid"]).row(["cargo", "9021"]).selected(Some(0))    ascii_tree().item(0, "src/").item(1, "lib.rs")
 ascii_plot(values).size(48, 8).format(|v| format!("{v:.0}MS"))    ascii_bars().bar("mon", 12.).cells(24)    ascii_cal(2026, 10).today(Some(6))

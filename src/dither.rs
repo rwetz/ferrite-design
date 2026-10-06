@@ -209,6 +209,11 @@ impl Picture {
         Picture::new(w, h, levels)
     }
 
+    /// A content hash: equal pictures have equal ids (for caches).
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
     /// The picture's size in samples.
     pub fn size(&self) -> (u32, u32) {
         (self.w, self.h)

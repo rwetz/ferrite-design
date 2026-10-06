@@ -74,7 +74,8 @@ impl Render for V {
 ")).child(ascii::tree(&[(0, "src/")]).len().to_string()).child(ascii::plot(&[1., 2.], 8, 4).join("
 "))
             .child(ascii::cal(2026, 10, false).join("
-")).child(ascii::frame(&["x"], ascii::PLAIN, Some("t")).join("
+"))
+            .child(ascii_art(dither::Picture::from_fn(4, 4, |u, _| u)).cols(120).charset(ascii::Charset::Full).fit(ascii::Fit::Shape).contrast(1.5).invert(false).diffuse(false)).child(ascii::frame(&["x"], ascii::PLAIN, Some("t")).join("
 "))
     }
 }

@@ -571,3 +571,400 @@ mod grid_tests {
     }
 }
 
+// ── ASCII art, fitted to the face ─────────────────────────────────────────
+
+/// Which characters a picture may be drawn with. Every set is real glyphs
+/// of the display face; the art engine knows each one's pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Charset {
+    /// ` .:-=+*#%@` — the classic ramp.
+    Classic,
+    /// Every ASCII punctuation mark, nothing else.
+    Punctuation,
+    /// `/` and `\` only: pictures as hatching.
+    Slashes,
+    /// `/ \ | - _`: line art.
+    Lines,
+    /// Accented letters (`é â ü Ñ Å …`) and the bare accents.
+    Accents,
+    /// A–Z and a–z.
+    Letters,
+    /// 0–9.
+    Digits,
+    /// `0` and `1`.
+    Binary,
+    /// CP437's Greek: `α ß Γ π Σ σ µ τ Φ Θ Ω δ φ ε`.
+    Greek,
+    /// Box-drawing pieces, single and double.
+    Box,
+    /// Shade and half blocks: `░ ▒ ▓ █ ▀ ▄ ▌ ▐`.
+    Blocks,
+    /// CP437's dingbats: `☺ ♥ ♦ ♣ ♠ ♪ ☼ ► ↕ ▲ …`.
+    Symbols,
+    /// The best character for every cell, from every text glyph the face
+    /// has (~200: ASCII, accents, Greek, maths, box drawing). Shade blocks
+    /// and dingbats are left out: blocks would win every cell on tone and
+    /// turn the picture back into pixels ([`Charset::Blocks`]), and dingbats
+    /// read as icons ([`Charset::Symbols`]).
+    Full,
+}
+
+impl Charset {
+    pub const ALL: [Charset; 13] = [
+        Charset::Classic,
+        Charset::Punctuation,
+        Charset::Slashes,
+        Charset::Lines,
+        Charset::Accents,
+        Charset::Letters,
+        Charset::Digits,
+        Charset::Binary,
+        Charset::Greek,
+        Charset::Box,
+        Charset::Blocks,
+        Charset::Symbols,
+        Charset::Full,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Charset::Classic => "classic",
+            Charset::Punctuation => "punctuation",
+            Charset::Slashes => "slashes",
+            Charset::Lines => "lines",
+            Charset::Accents => "accents",
+            Charset::Letters => "letters",
+            Charset::Digits => "digits",
+            Charset::Binary => "binary",
+            Charset::Greek => "greek",
+            Charset::Box => "box drawing",
+            Charset::Blocks => "blocks",
+            Charset::Symbols => "symbols",
+            Charset::Full => "best character",
+        }
+    }
+
+    /// The characters, space first. `Full` is every glyph the engine knows.
+    pub fn chars(self) -> String {
+        match self {
+            Charset::Classic => " .:-=+*#%@".into(),
+            Charset::Punctuation => " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".into(),
+            Charset::Slashes => " /\\".into(),
+            Charset::Lines => " /\\|-_".into(),
+            Charset::Accents => " `^~ÇüéâäàåçêëèïîìÄÅÉôöòûùÿÖÜáíóúñÑ".into(),
+            Charset::Letters => std::iter::once(' ').chain('A'..='Z').chain('a'..='z').collect(),
+            Charset::Digits => " 0123456789".into(),
+            Charset::Binary => " 01".into(),
+            Charset::Greek => " αßΓπΣσµτΦΘΩδφε".into(),
+            Charset::Box => " ─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬╒╕╘╛╓╖╙╜╞╡╤╧╟╢╥╨╪╫".into(),
+            Charset::Blocks => " ░▒▓█▀▄▌▐".into(),
+            Charset::Symbols => " ☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼⌂".into(),
+            Charset::Full => {
+                // Text glyphs only: no shade blocks (they'd turn the picture
+                // back into pixels) and no dingbats (☺ ♥ ◙ read as icons).
+                let skip = Charset::Blocks.chars() + &Charset::Symbols.chars() + &Charset::Box.chars();
+                crate::glyphs::GLYPHS.iter().map(|g| g.0).filter(|c| *c == ' ' || !skip.contains(*c)).collect()
+            }
+        }
+    }
+
+    /// How this set reads best: tone for ramps, shape for everything that
+    /// has geometry to match.
+    pub fn default_fit(self) -> Fit {
+        match self {
+            Charset::Classic | Charset::Digits | Charset::Binary => Fit::Tone,
+            _ => Fit::Shape,
+        }
+    }
+}
+
+/// How a cell picks its character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Fit {
+    /// By ink: the glyph whose coverage is closest to the cell's darkness.
+    /// The ramp is sorted from the glyphs' real pixels, so any set works.
+    Tone,
+    /// By shape: the glyph whose 4×8 coverage best matches the picture
+    /// under the cell, so edges become `/`, `|`, `_`, `▄`… where they fall.
+    Shape,
+}
+
+/// Everything that decides how a picture becomes characters.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArtStyle {
+    pub charset: Charset,
+    pub fit: Fit,
+    /// Gain around mid-grey before fitting: 1 = as is, 2 = punchy.
+    pub contrast: f32,
+    /// Swap ink and paper (light pictures on a dark ground read better).
+    pub invert: bool,
+    /// Spread each cell's tone error to its neighbours (Floyd–Steinberg),
+    /// so a short ramp or a sparse set still carries smooth gradients — as
+    /// density. Shape fits keep choosing by shape; only the ink carries over.
+    pub diffuse: bool,
+}
+
+impl ArtStyle {
+    /// The style that suits `charset`: its default fit, and diffusion for
+    /// the sparse sets (slashes, lines, binary), whose few glyphs can only
+    /// carry tone as density.
+    pub fn new(charset: Charset) -> Self {
+        let diffuse = matches!(charset, Charset::Slashes | Charset::Lines | Charset::Binary);
+        ArtStyle { charset, fit: charset.default_fit(), contrast: 1., invert: false, diffuse }
+    }
+
+    fn key(&self) -> (Charset, Fit, u32, bool, bool) {
+        (self.charset, self.fit, self.contrast.to_bits(), self.invert, self.diffuse)
+    }
+}
+
+impl Default for ArtStyle {
+    fn default() -> Self {
+        ArtStyle::new(Charset::Classic)
+    }
+}
+
+/// Sub-samples per cell: the 8×16 glyph in 2×2-pixel blocks.
+const SUB_W: usize = 4;
+const SUB_H: usize = 8;
+const SUBS: usize = SUB_W * SUB_H;
+
+/// How much a cell's overall ink counts against its shape in a shape fit.
+const TONE: f32 = 1.5;
+
+/// A 3×3 box blur over a cell's 4×8 coverage, edges clamped.
+fn blur(c: &[f32; SUBS]) -> [f32; SUBS] {
+    let mut out = [0.; SUBS];
+    for y in 0..SUB_H {
+        for x in 0..SUB_W {
+            let (mut sum, mut n) = (0., 0.);
+            for dy in -1i32..=1 {
+                for dx in -1i32..=1 {
+                    let (xx, yy) = (x as i32 + dx, y as i32 + dy);
+                    if (0..SUB_W as i32).contains(&xx) && (0..SUB_H as i32).contains(&yy) {
+                        sum += c[yy as usize * SUB_W + xx as usize];
+                        n += 1.;
+                    }
+                }
+            }
+            out[y * SUB_W + x] = sum / n;
+        }
+    }
+    out
+}
+
+/// A glyph's ink in each 2×2-pixel block of its 8×16 cell, 0–1.
+fn coverage(rows: &[u8; 16]) -> [f32; SUBS] {
+    let mut out = [0.; SUBS];
+    for (y, row) in rows.iter().enumerate() {
+        for x in 0..8 {
+            if row & (0x80 >> x) != 0 {
+                out[(y / 2) * SUB_W + x / 2] += 0.25;
+            }
+        }
+    }
+    out
+}
+
+struct Shape {
+    ch: char,
+    cover: [f32; SUBS],
+    ink: f32,
+}
+
+fn shapes(charset: Charset) -> Vec<Shape> {
+    let wanted = charset.chars();
+    crate::glyphs::GLYPHS
+        .iter()
+        .filter(|(c, _)| wanted.contains(*c))
+        .map(|(ch, rows)| {
+            let cover = coverage(rows);
+            Shape { ch: *ch, ink: cover.iter().sum::<f32>() / SUBS as f32, cover }
+        })
+        .collect()
+}
+
+/// `level(u, v)` (0 = paper, 1 = ink) drawn as `cols` columns of `style`'s
+/// characters, rows following `aspect` (height / width) and the 1:2 cell.
+/// Unlike [`art`], it knows each glyph's pixels: [`Fit::Shape`] picks the
+/// character that best matches the picture under every cell. Costs
+/// `cols × rows × glyphs × 32` — cache the result (the `ascii_art`
+/// component does).
+pub fn art_fit(level: impl Fn(f32, f32) -> f32, cols: usize, aspect: f32, style: ArtStyle) -> Vec<String> {
+    let cols = cols.max(1);
+    let rows = ((cols as f32 * aspect) / 2.).round().max(1.) as usize;
+    let glyphs = shapes(style.charset);
+    if glyphs.is_empty() {
+        return vec![" ".repeat(cols); rows];
+    }
+    // Map picture ink onto what the set can actually draw: the densest
+    // glyph stands for full ink.
+    let densest = glyphs.iter().map(|g| g.ink).fold(0., f32::max).max(f32::EPSILON);
+    let adjust = |v: f32| {
+        let v = if style.invert { 1. - v } else { v };
+        ((v - 0.5) * style.contrast + 0.5).clamp(0., 1.)
+    };
+    let sample = |c: usize, r: usize| {
+        let mut s = [0.; SUBS];
+        // Each 2×2-pixel block is the mean of four samples inside it, so
+        // strokes thinner than a block still register.
+        for j in 0..SUB_H {
+            for i in 0..SUB_W {
+                let mut sum = 0.;
+                for (di, dj) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                    let u = (c as f32 + (i as f32 + di) / SUB_W as f32) / cols as f32;
+                    let v = (r as f32 + (j as f32 + dj) / SUB_H as f32) / rows as f32;
+                    sum += adjust(level(u, v));
+                }
+                s[j * SUB_W + i] = sum / 4.;
+            }
+        }
+        s
+    };
+    match style.fit {
+        Fit::Tone => {
+            let mut grid: Vec<Vec<f32>> = (0..rows)
+                .map(|r| (0..cols).map(|c| sample(c, r).iter().sum::<f32>() / SUBS as f32 * densest).collect())
+                .collect();
+            let mut out = Vec::with_capacity(rows);
+            for r in 0..rows {
+                let mut line = String::with_capacity(cols);
+                for c in 0..cols {
+                    let want = grid[r][c];
+                    let g = glyphs.iter().min_by(|a, b| (a.ink - want).abs().total_cmp(&(b.ink - want).abs())).unwrap();
+                    line.push(g.ch);
+                    if style.diffuse {
+                        let err = want - g.ink;
+                        let mut spread = |r: usize, c: usize, w: f32| {
+                            if let Some(cell) = grid.get_mut(r).and_then(|row| row.get_mut(c)) {
+                                *cell += err * w;
+                            }
+                        };
+                        spread(r, c + 1, 7. / 16.);
+                        if c > 0 {
+                            spread(r + 1, c - 1, 3. / 16.);
+                        }
+                        spread(r + 1, c, 5. / 16.);
+                        spread(r + 1, c + 1, 1. / 16.);
+                    }
+                }
+                out.push(line);
+            }
+            out
+        }
+        Fit::Shape => {
+            // Compare what the eye sees: both the glyph and the picture,
+            // softened, so a thin stroke counts as the mid-tone it reads as;
+            // plus a tone term that keeps each cell's ink right. The picture
+            // is scaled toward the set's densest glyph, so full ink maps to
+            // it, but never below half (line art keeps its thin strokes).
+            let scale = densest.max(0.5);
+            let soft: Vec<[f32; SUBS]> = glyphs.iter().map(|g| blur(&g.cover)).collect();
+            let mut carry = vec![vec![0f32; cols + 2]; rows + 1];
+            let mut out = Vec::with_capacity(rows);
+            for r in 0..rows {
+                let mut line = String::with_capacity(cols);
+                for c in 0..cols {
+                    let raw = sample(c, r);
+                    let s = raw.map(|v| v * scale);
+                    let bs = blur(&s);
+                    let mean = raw.iter().sum::<f32>() / SUBS as f32;
+                    // Diffusing, ink is density, so it aims at the set's own
+                    // range (full ink = the densest glyph) plus the carried
+                    // error; otherwise at the picture as the shape sees it.
+                    let m = if style.diffuse { mean * densest + carry[r][c + 1] } else { mean * scale };
+                    let cost = |i: usize| {
+                        let shape: f32 = soft[i].iter().zip(&bs).map(|(g, s)| (g - s) * (g - s)).sum();
+                        shape + TONE * SUBS as f32 * (glyphs[i].ink - m).powi(2)
+                    };
+                    let best = (0..glyphs.len()).min_by(|&a, &b| cost(a).total_cmp(&cost(b))).unwrap();
+                    line.push(glyphs[best].ch);
+                    if style.diffuse {
+                        let err = m - glyphs[best].ink;
+                        carry[r][c + 2] += err * 7. / 16.;
+                        carry[r + 1][c] += err * 3. / 16.;
+                        carry[r + 1][c + 1] += err * 5. / 16.;
+                        carry[r + 1][c + 2] += err / 16.;
+                    }
+                }
+                out.push(line);
+            }
+            out
+        }
+    }
+}
+
+/// Fitted art by (picture id, columns, style).
+type ArtCache = std::collections::HashMap<(u64, usize, (Charset, Fit, u32, bool, bool)), std::rc::Rc<Vec<String>>>;
+
+thread_local! {
+    static ART_CACHE: std::cell::RefCell<ArtCache> = Default::default();
+}
+
+/// [`art_fit`] for a [`crate::dither::Picture`], cached by the picture's
+/// content, the width and the style: fitting is expensive, re-rendering a
+/// view is not.
+pub fn picture_art(picture: &crate::dither::Picture, cols: usize, style: ArtStyle) -> std::rc::Rc<Vec<String>> {
+    let key = (picture.id(), cols, style.key());
+    if let Some(hit) = ART_CACHE.with_borrow(|c| c.get(&key).cloned()) {
+        return hit;
+    }
+    let (w, h) = picture.size();
+    let lines = std::rc::Rc::new(art_fit(|u, v| picture.sample(u, v), cols, h as f32 / w.max(1) as f32, style));
+    ART_CACHE.with_borrow_mut(|c| {
+        if c.len() >= 96 {
+            c.clear();
+        }
+        c.insert(key, lines.clone());
+    });
+    lines
+}
+
+#[cfg(test)]
+mod art_tests {
+    use super::*;
+
+    #[test]
+    fn every_charset_is_real_glyphs() {
+        let known: String = crate::glyphs::GLYPHS.iter().map(|g| g.0).collect();
+        for set in Charset::ALL {
+            let missing: String = set.chars().chars().filter(|c| !known.contains(*c)).collect();
+            assert!(missing.is_empty(), "{set:?} uses glyphs the table lacks: {missing:?}");
+            assert!(set.chars().starts_with(' '), "{set:?} needs paper");
+        }
+        assert!(crate::glyphs::GLYPHS.len() > 200);
+        for (c, _) in crate::glyphs::GLYPHS {
+            assert!(crate::fonts::display_has(*c) || *c == ' ', "{c:?} not in the display face");
+        }
+    }
+
+    #[test]
+    fn shape_fit_draws_edges_with_their_glyphs() {
+        // A diagonal edge, ink below-right of it: slashes should pick '/'.
+        let lines = art_fit(|u, v| if v > 1. - u { 1. } else { 0. }, 8, 1., ArtStyle { diffuse: false, ..ArtStyle::new(Charset::Slashes) });
+        // The edge itself is '/' on every row; the solid ink behind it hatches.
+        for line in &lines {
+            assert_eq!(line.trim_start().chars().next(), Some('/'), "{lines:?}");
+        }
+        // A vertical edge in line art becomes bars.
+        let lines = art_fit(|u, _| if (u - 0.5625).abs() < 0.02 { 1. } else { 0. }, 8, 1., ArtStyle { diffuse: false, ..ArtStyle::new(Charset::Lines) });
+        assert!(lines.concat().contains('|'), "{lines:?}");
+    }
+
+    #[test]
+    fn tone_fit_orders_ink_and_paper() {
+        let style = ArtStyle::new(Charset::Classic);
+        let lines = art_fit(|u, _| u, 20, 0.1, style);
+        let row: Vec<char> = lines[0].chars().collect();
+        assert_eq!(row[0], ' ');
+        // The densest glyph of the set (in the VGA face that's '#').
+        let densest = *row.last().unwrap();
+        assert!(densest == '#' || densest == '@', "{row:?}");
+        let inverted = art_fit(|u, _| u, 20, 0.1, ArtStyle { invert: true, ..style });
+        assert_eq!(inverted[0].chars().next(), Some(densest));
+        // Diffusion keeps a mid-grey's average while using only two glyphs.
+        let flat = art_fit(|_, _| 0.5, 40, 0.5, ArtStyle { diffuse: true, ..ArtStyle::new(Charset::Binary) });
+        let chars: String = flat.concat();
+        assert!(chars.contains(' ') && (chars.contains('0') || chars.contains('1')), "{chars}");
+    }
+}

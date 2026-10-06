@@ -251,7 +251,7 @@ set. Two layers:
   | `ascii_box()` | a frame of real box glyphs, `┌─[ TITLE ]─┐`, `╔═╗` (`.double()`), `╒═╕`, `╓─╖` or `+-+` (`.style(..)`), any size; `.shadow()`, `.draw_on(..)` | terminal-feel blocks: system status, boot screens, about boxes, dialogs, a retro mode |
   | `ascii_rule(label)` | `── LABEL ─────` across the width (`.double()`) | dividers inside text-mode screens |
   | `banner(id, text)` | big 5×5 block letters, drawn on with a wipe | title screens, splash, empty states |
-  | `ascii_art(picture)` | a grayscale `Picture` as characters (` .:-=+*#%@`, any ramp) | hero art, about boxes, loading art |
+  | `ascii_art(picture)` | a grayscale `Picture` as characters: a ramp, or a `Charset` (punctuation, slashes, accents, box drawing, best character…) matched by shape against the face's real glyphs | hero art, about boxes, loading art |
   | `ascii_gauge(v)` | `CPU [████▒·····]  42%` | dense live readouts; never animates |
   | `ascii_table()` | a boxed text grid: `┌──┬──┐ │ │ ├──┼──┤` | readouts, reports, about boxes (`table` is the interactive one) |
   | `ascii_tree()` | `├── src/` `│   └── lib.rs` | file listings, outlines, dependency trees |

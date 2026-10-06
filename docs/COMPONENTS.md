@@ -88,7 +88,7 @@ with a scheme picker), and whole apps built from them in `examples/app_*.rs`.
 | **`ascii_box`** | `textmode` | real box-glyph frame in five styles (`.double()`, `.style(ascii::DOUBLE_H / DOUBLE_V / PLAIN)`), title in the edge, any size; `.shadow()` for a DOS drop shadow, `.draw_on(id, key)` to trace the frame on |
 | **`ascii_rule`** | `textmode` | `── LABEL ───` across the width |
 | **`banner`** | `textmode` | 5×5 block letters as quads, wiped on; `.shadow()` |
-| **`ascii_art`** | `textmode` | a `Picture` as characters, any ramp (`ascii::CLASSIC`, `BUBBLES`) |
+| **`ascii_art`** | `textmode` | a `Picture` as characters: any ramp, or `.charset(ascii::Charset::X)` — classic, punctuation, slashes, lines, accents, letters, digits, binary, Greek, box drawing, blocks, symbols, or `Full` (best character) — fitted by tone or by shape against the face's real glyph pixels; `.contrast`, `.invert`, `.diffuse`; cached |
 | **`ascii_gauge`** | `textmode` | `[████▒·····] 42%`; live-data safe |
 | **`mark`** | `textmode` | the `▓▒░` mark as real dither |
 | **`ascii_table`** | `textmode` | boxed text grid with junctions, numbers right-aligned, `.selected(row)` |

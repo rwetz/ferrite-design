@@ -33,6 +33,7 @@ pub mod components;
 pub mod dither;
 pub mod fonts;
 pub mod fuzzy;
+mod glyphs;
 pub mod icon;
 pub mod motion;
 pub mod prelude;

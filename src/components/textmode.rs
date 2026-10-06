@@ -451,10 +451,15 @@ pub struct AsciiArt {
     cols: usize,
     ramp: &'static [char],
     color: Option<Hsla>,
+    charset: Option<ascii::Charset>,
+    fit: Option<ascii::Fit>,
+    contrast: f32,
+    invert: bool,
+    diffuse: bool,
 }
 
 pub fn ascii_art(picture: Picture) -> AsciiArt {
-    AsciiArt { picture, cols: 48, ramp: &ascii::CLASSIC, color: None }
+    AsciiArt { picture, cols: 48, ramp: &ascii::CLASSIC, color: None, charset: None, fit: None, contrast: 1., invert: false, diffuse: false }
 }
 
 impl AsciiArt {
@@ -478,15 +483,59 @@ impl AsciiArt {
         self.color = Some(color);
         self
     }
+
+    /// Draw with a character set the engine knows glyph by glyph
+    /// (`Charset::Punctuation`, `Slashes`, `Accents`, `Box`, `Full` for the
+    /// best character…), fitted by tone or by shape. Overrides `.ramp`.
+    pub fn charset(mut self, charset: ascii::Charset) -> Self {
+        self.charset = Some(charset);
+        self
+    }
+
+    /// Tone or shape (default: what suits the charset).
+    pub fn fit(mut self, fit: ascii::Fit) -> Self {
+        self.fit = Some(fit);
+        self
+    }
+
+    /// Gain around mid-grey before fitting (1 = as is).
+    pub fn contrast(mut self, contrast: f32) -> Self {
+        self.contrast = contrast.max(0.);
+        self
+    }
+
+    /// Swap ink and paper.
+    pub fn invert(mut self, invert: bool) -> Self {
+        self.invert = invert;
+        self
+    }
+
+    /// Tone fit: error-diffuse between cells for smooth gradients.
+    pub fn diffuse(mut self, diffuse: bool) -> Self {
+        self.diffuse = diffuse;
+        self
+    }
 }
 
 impl RenderOnce for AsciiArt {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
         let (w, h) = self.picture.size();
-        let ramp = self.ramp;
-        let picture = self.picture;
-        let lines = ascii::art(|u, v| picture.sample(u, v), self.cols, h as f32 / w.max(1) as f32, ramp);
+        let fitted = self.charset.is_some() || self.fit.is_some() || self.invert || self.diffuse || self.contrast != 1.;
+        let lines: Vec<String> = if fitted {
+            let charset = self.charset.unwrap_or(ascii::Charset::Classic);
+            let style = ascii::ArtStyle {
+                charset,
+                fit: self.fit.unwrap_or(charset.default_fit()),
+                contrast: self.contrast,
+                invert: self.invert,
+                diffuse: self.diffuse,
+            };
+            ascii::picture_art(&self.picture, self.cols, style).as_ref().clone()
+        } else {
+            let picture = self.picture;
+            ascii::art(|u, v| picture.sample(u, v), self.cols, h as f32 / w.max(1) as f32, self.ramp)
+        };
         div()
             .flex()
             .flex_col()
