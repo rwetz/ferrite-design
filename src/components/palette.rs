@@ -41,7 +41,7 @@ use gpui::{
 };
 use super::input::{InputEvent, TextInput};
 
-use super::overlay::{scrim, surface};
+use super::overlay::{reveal, scrim, surface};
 use super::tooltip::kbd;
 use crate::dither::{self, dither};
 use crate::fonts::{FerriteText, Scale, display_size};
@@ -325,6 +325,7 @@ impl Render for CommandPalette {
             return home.into_any_element();
         }
         let p = palette(cx);
+        let open = crate::animate::play("open", 0u8, crate::motion::BASE, window, cx);
         let viewport = window.viewport_size();
         let total = self.commands.len();
         let shown = self.items().len();
@@ -465,7 +466,7 @@ impl Render for CommandPalette {
                             .absolute()
                             .inset_0()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.close(window, cx)))
-                            .child(scrim(cx)),
+                            .child(scrim(open.eased(), cx)),
                     )
                     .child(
                         div()
@@ -475,7 +476,7 @@ impl Render for CommandPalette {
                             .right_0()
                             .flex()
                             .justify_center()
-                            .child(div().id("palette").role(Role::Dialog).aria_label("Command palette").occlude().child(surface(body, cx))),
+                            .child(div().id("palette").role(Role::Dialog).aria_label("Command palette").occlude().child(reveal(surface(body, cx), crate::motion::BASE, window, cx))),
                     ),
             ),
         )

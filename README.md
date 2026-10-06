@@ -35,6 +35,8 @@ window chrome, and the rules that hold them together.
 
 ![Split pane, scroll area and a 10,000-row virtual list with Ferrite scrollbars](docs/img/components-layout.png)
 
+![Motion, caught mid-frame: the page unrolling behind an amber scan line, a dissolve, a decrypt](docs/img/motion-midframe.png)
+
 ## Scope
 
 **For:** native desktop apps built on [GPUI](https://gpui.rs) (Rust,
@@ -64,6 +66,7 @@ gradients, stepped motion. The side-by-side is in
 | `chrome` | Window options, square corners on Windows 11, Ferrite's own `TitleBar`, and `window_frame` (Linux resize edges). |
 | `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `submenu`, `CommandPalette`, `Toaster`, `dialog`, `segmented`, `slider`, `tree`, `table`, `TextInput`, `scroll_area`, `scrollbar`, `virtual_list`, `split` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
 | `icon` | 21 pixel icons drawn on the display font's grid; they never fall back to a system font. |
+| `animate` | The motion engine: stepped, eased clips (`play`) and effects — unroll, dissolve, decrypt, typewriter, shake, count. |
 | `fuzzy` | The palette's matcher: exact best-alignment scoring (word starts, runs, gaps) with match positions. |
 
 ## Use

@@ -24,6 +24,7 @@
 //! See `docs/DESIGN_LANGUAGE.md` for the full language and
 //! `examples/showcase.rs` for every primitive on one screen.
 
+pub mod animate;
 pub mod ascii;
 pub mod chrome;
 pub mod components;

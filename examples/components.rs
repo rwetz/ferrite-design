@@ -15,7 +15,7 @@ use ferrite_design::{
     components::{
         Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
-        InputEvent, SortDir, TextInput, column, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
+        InputEvent, SortDir, TextInput, column, count_up, decrypt, dissolve, shake, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
     },
     icon::icon,
     motion, palette, theme,
@@ -35,7 +35,7 @@ const FILES: [(Icon, &str, &str); 5] = [
 ];
 const PROCS: [(&str, &str); 4] = [("ferrite-atlas", "pid 4412"), ("cargo", "pid 9021"), ("rust-analyzer", "pid 3310"), ("showcase", "pid 7777")];
 const MODES: [&str; 3] = ["Fast", "Balanced", "Thorough"];
-const PAGES: [&str; 3] = ["Controls", "Data & input", "Layout"];
+const PAGES: [&str; 4] = ["Controls", "Data & input", "Layout", "Motion"];
 const LOG_LINES: usize = 10_000;
 const PROC_TABLE: [(&str, u32, f32, u32, &str); 6] = [
     ("ferrite-atlas", 4412, 31.0, 412, "run"),
@@ -73,6 +73,8 @@ struct Components {
     row: usize,
     tick: u64,
     inputs: Vec<Entity<TextInput>>,
+    name_errors: u32,
+    replay: [u32; 6],
     _input_subs: Vec<Subscription>,
     word_wrap: bool,
     show_hidden: bool,
@@ -114,6 +116,11 @@ impl Components {
                     let name = ["NAME", "FILTER", "TOKEN", "LOCKED"][i];
                     match ev {
                         InputEvent::Change => cx.notify(),
+                        InputEvent::Submit if i == 0 && input.read(cx).value().trim().is_empty() => {
+                            this.name_errors += 1;
+                            this.notify(toast("Name can't be empty").warning(), cx);
+                            this.log("NAME REJECTED", cx);
+                        }
                         InputEvent::Submit => {
                             let v = input.read(cx).value();
                             let shown = if i == 2 { "•".repeat(v.chars().count()) } else { v.to_string() };
@@ -147,6 +154,8 @@ impl Components {
             row: 2,
             tick: 0,
             inputs,
+            name_errors: 0,
+            replay: [0; 6],
             _input_subs: input_subs,
             word_wrap: true,
             show_hidden: false,
@@ -283,6 +292,95 @@ impl Components {
         });
         // Selection follows the row, not the index.
         self.proc_sel = selected.and_then(|pid| self.procs.iter().position(|p| p.pid == pid));
+    }
+
+    fn motion_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        let this = cx.weak_entity();
+        let replay = |i: usize| {
+            let this = this.clone();
+            Button::new(("replay", i)).label("Replay").icon(Icon::Refresh).small().ghost().on_click(move |_, _, cx| {
+                let _ = this.update(cx, |v, cx| {
+                    v.replay[i] += 1;
+                    cx.notify();
+                });
+            })
+        };
+        let tile = |i: usize, title: &'static str, note: &'static str, body: gpui::AnyElement| {
+            panel(title).meta(note).flex_1().child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .child(div().h(px(150.)).flex().items_center().justify_center().child(body))
+                    .child(div().flex().flex_row().justify_end().child(replay(i))),
+            )
+        };
+        let r = self.replay;
+        let big = |t: &'static str| div().display(Scale::X2, window).text_color(hsla(p.fg)).child(t);
+
+        let unroll_demo = unroll_in(("m-unroll", r[0] as usize), r[0], {
+            div()
+                .w(px(300.))
+                .flex()
+                .flex_col()
+                .border_1()
+                .border_color(hsla(p.line_strong))
+                .bg(hsla(p.raised))
+                .children(["boot sequence", "mount /dev/fe0", "load palette IRON", "dither cache warm", "ready"].iter().map(|l| {
+                    div().h(px(24.)).px_3().flex().items_center().body(text::SM).text_color(hsla(p.fg_dim)).child(*l)
+                }))
+        })
+        .duration(motion::SLOW);
+        let dissolve_demo = dissolve(("m-dissolve", r[1] as usize), r[1], big("FERRITE"));
+        let decrypt_demo = div()
+            .display(Scale::X1, window)
+            .text_color(hsla(p.accent_text))
+            .child(decrypt(("m-decrypt", r[2] as usize), "ACCESS GRANTED · 0x7F3A"));
+        let type_demo = div()
+            .body(text::LG)
+            .text_color(hsla(p.fg))
+            .child(typewriter(("m-type", r[3] as usize), "> cargo run --release"));
+        let shake_demo = shake(
+            "m-shake",
+            r[4],
+            div()
+                .px_4()
+                .py_2()
+                .border_1()
+                .border_color(hsla(p.danger))
+                .display(Scale::X1, window)
+                .text_color(hsla(p.danger))
+                .child("ACCESS DENIED"),
+        );
+        let target = if r[5].is_multiple_of(2) { 98.6 } else { 12.5 };
+        let count_demo = div()
+            .display(Scale::X2, window)
+            .text_color(hsla(p.accent_text))
+            .child(count_up("m-count", target, |v| format!("{v:05.1}%")));
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(space::ROW)
+            .child(
+                div()
+                    .body(text::SM)
+                    .text_color(hsla(p.fg_dim))
+                    .child("Stepped at 25fps, eased out: big bites first, then it settles. Every effect stays in its box and is over in a third of a second."),
+            )
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(tile(0, "Unroll", "panels · menus · pages", unroll_demo.into_any_element()))
+                    .child(tile(1, "Dissolve", "Bayer ramp, 16 levels", dissolve_demo.into_any_element()))
+                    .child(tile(2, "Decrypt", "text locks in left → right", decrypt_demo.into_any_element())),
+            )
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(tile(3, "Typewriter", "terminal print", type_demo.into_any_element()))
+                    .child(tile(4, "Shake", "rejection · 6px max", shake_demo.into_any_element()))
+                    .child(tile(5, "Count", "numbers roll in steps", count_demo.into_any_element())),
+            )
     }
 
     fn layout_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
@@ -777,7 +875,7 @@ impl Render for Components {
                 .flex()
                 .flex_col()
                 .gap_2()
-                .child(field("Name", &self.inputs[0]))
+                .child(shake("name-shake", self.name_errors, field("Name", &self.inputs[0])))
                 .child(field("Filter", &self.inputs[1]))
                 .child(field("Token", &self.inputs[2]))
                 .child(field("Locked", &self.inputs[3]))
@@ -956,6 +1054,12 @@ impl Render for Components {
 
         let data_page = self.data_page(window, cx);
         let layout_page = self.layout_page(window, cx);
+        let motion_page = self.motion_page(window, cx);
+        // The last event decrypts into place each time it changes.
+        let last = ferrite_design::animate::scramble(
+            &self.last,
+            ferrite_design::animate::play_on_change("last-event", &self.last, motion::BASE, window, cx),
+        );
         chrome::window_frame().child(div()
             .flex()
             .flex_col()
@@ -981,6 +1085,7 @@ impl Render for Components {
                                 .tab(PAGES[0])
                                 .tab(PAGES[1])
                                 .tab(PAGES[2])
+                                .tab(PAGES[3])
                                 .selected(self.page)
                                 .on_select({
                                     let this = cx.weak_entity();
@@ -993,8 +1098,9 @@ impl Render for Components {
                                     }
                                 }),
                         )
-                        .when(self.page == 1, |el| el.child(data_page))
-                        .when(self.page == 2, |el| el.child(layout_page))
+                        .when(self.page == 1, |el| el.child(unroll_in("page-1", 1, data_page)))
+                        .when(self.page == 2, |el| el.child(unroll_in("page-2", 2, layout_page)))
+                        .when(self.page == 3, |el| el.child(unroll_in("page-3", 3, motion_page)))
                         .when(self.page == 0, |el| el.child(div().flex().flex_col().gap(space::ROW)
                         .child(buttons)
                         .child(div().flex().flex_row().gap(space::ROW).child(toggles).child(status))
@@ -1012,7 +1118,7 @@ impl Render for Components {
                     .tooltip(tooltip("Last event").builder())
                     .child(
                         status_bar()
-                            .left(self.last.clone())
+                            .left(last)
                             .left(if is_dark { "IRON" } else { "PAPER" })
                             .left(format!("MODE {}", MODES[self.mode].to_uppercase()))
                             .right(format!("CLICKS {}", self.clicks))

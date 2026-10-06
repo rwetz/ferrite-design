@@ -35,7 +35,7 @@ use gpui::{
 };
 
 use super::button::Button;
-use super::overlay::{scrim, surface};
+use super::overlay::{reveal, scrim, surface};
 use crate::dither::{self, dither};
 use crate::fonts::{FerriteText, Scale};
 use crate::icon::{Icon, icon};
@@ -256,9 +256,10 @@ impl RenderOnce for Dialog {
                     _ => {}
                 }
             })
-            .child(surface(div().w(self.width).flex().flex_col().child(header).child(body).child(footer), cx));
+            .child(reveal(surface(div().w(self.width).flex().flex_col().child(header).child(body).child(footer), cx), crate::motion::BASE, window, cx));
 
         let viewport = window.viewport_size();
+        let open = crate::animate::play("open", 0u8, crate::motion::BASE, window, cx);
         root.child(
             deferred(
                 anchored().position(point(px(0.), px(0.))).child(
@@ -277,7 +278,7 @@ impl RenderOnce for Dialog {
                                         close(window, cx);
                                     }
                                 })
-                                .child(scrim(cx)),
+                                .child(scrim(open.eased(), cx)),
                         )
                         .child(
                             div()

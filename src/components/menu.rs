@@ -42,7 +42,7 @@ use gpui::{
     Window, div, prelude::FluentBuilder as _, px,
 };
 
-use super::overlay::{Align, OverlayState, at_point, below, surface};
+use super::overlay::{Align, OverlayState, at_point, below, reveal, surface};
 use crate::fonts::{FerriteText, Scale, display_size};
 use crate::icon::{Icon, icon};
 use crate::theme::palette;
@@ -495,7 +495,8 @@ fn render_level(
             }
         });
     }
-    div().id(("menu-level", level)).role(Role::Menu).occlude().child(surface(list, cx))
+    let panel = surface(list, cx);
+    div().id(("menu-level", level)).role(Role::Menu).occlude().child(reveal(panel, crate::motion::FAST, window, cx))
 }
 
 impl RenderOnce for Menu {

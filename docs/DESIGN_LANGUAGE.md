@@ -33,7 +33,7 @@ Ferrite deliberately keeps the Nexis *rules* and replaces the Nexis *look*.
 | Neutral base palette | cool OKLCH greys, glass | near-pure iron greys, opaque |
 | Tokens have one source of truth | `globals.css` + theme engine | `src/tokens.rs` → `palette(cx)` in every component |
 | Theme applied before first paint | `index.html` anti-flash script | `theme::install` before `open_window` |
-| Shared motion vocabulary | springs (`snappy/smooth/gentle`) | steps (`FAST/BASE/SLOW`, `steps(n)`, `BLINK`) |
+| Shared motion vocabulary | springs (`snappy/smooth/gentle`) | stepped, eased clips (`animate::play`, `FAST/BASE/SLOW`, `BLINK`) |
 | Respect reduced motion | `MotionConfig reducedMotion="user"` | `motion::reduced(cx)` → render final state |
 | Self-drawn chrome on Win/Linux, native on macOS | 12px rounded glass frame | square frame, `_ □ x` text-mode controls |
 | Self-hosted, subsetted fonts | Inter + JetBrains Mono | PxPlus IBM VGA 8×16 + JetBrains Mono, embedded |
@@ -199,31 +199,67 @@ renders them (§3.2).
 
 ## 6. Motion
 
-Nexis glides; Ferrite **steps**. Machines don't ease.
+Nexis glides; Ferrite **steps**. The brief: **jerky yet smooth, bold yet
+contained.**
+
+- **Jerky** — every animation advances in whole frames at 25fps
+  (`motion::FRAME`). Nothing glides; you can count the steps.
+- **Smooth** — the steps follow one steep ease-out (`animate::snap`, cubic),
+  so the first frames take big bites and the last ones settle. A steady
+  cadence plus a front-loaded curve reads as fluid, not broken.
+- **Bold** — effects you can't miss: a CRT unroll with an amber scan edge, a
+  Bayer dissolve, text that decrypts into place, a shake.
+- **Contained** — every effect stays inside its element's box and is over in
+  120–320ms. Clips run a timer only while playing; an idle window does no
+  work.
 
 | Token | Value | Use |
 |---|---|---|
-| — | instant | default for hover, select, toggle |
-| `motion::FRAME` | 40ms | one stepped frame (~25fps, deliberately chunky) |
-| `motion::FAST` | 120ms | 3-frame reveals |
-| `motion::BASE` | 200ms | default stepped transition |
-| `motion::SLOW` | 320ms | large reveals |
+| — | instant | hover, select, focus — anything the pointer does continuously |
+| `motion::FRAME` | 40ms | one step (25fps) |
+| `motion::FAST` | 120ms · 3 frames | menus, popovers, switch thumbs |
+| `motion::BASE` | 200ms · 5 frames | modals, pages, tab bars, decrypts |
+| `motion::SLOW` | 320ms · 8 frames | shakes, number rolls, large unrolls |
 | `motion::BLINK` | 1060ms | caret / live-marker cycle, square wave |
 
-**Periodic motion runs on timers, not animations.** Blinks, spinners and
-tickers flip state with `cx.notify()` at the rate their content changes; a
-repeating `with_animation` redraws the entire window every display frame
-(PITFALLS §17).
+### 6.1 The vocabulary
+
+| Effect | What it does | Where Ferrite uses it |
+|---|---|---|
+| **unroll** | clips top-down to `snap(t)` of the height, 2px amber scan line on the edge | every floating surface opening (menus, submenus, popover, palette, dialog), page switches |
+| **screen door** | modal backdrop density steps up the Bayer ramp to 69% | palette, dialog |
+| **dissolve** | `bg`-ink dither veil thins through the 16 Bayer levels | content swapping in |
+| **decrypt** | characters lock in left→right; the rest churn through `#%&*+=<>/\|$@?!` each frame; spaces hold the word shapes | status lines, results arriving |
+| **typewriter** | characters appear in order with a `█` cursor | prompts, log lines |
+| **shake** | 0, 6, −5, 4, −3, 2, −1, 0px — one step per frame, never beyond 6px | rejected input, failed actions |
+| **travel** | a part moves between two rest positions in eased whole-pixel steps | switch thumb |
+| **grow** | an indicator widens from its centre | the active tab's amber bar |
+| **step-in** | dither + 40→14→4→0px slide | toasts |
+| **count** | a number rolls to its value | totals, timings |
+
+### 6.2 Rules
+
+- **Entrances animate; exits don't.** Closing is instant — the user has
+  already moved on.
+- **Continuous input never animates** (hover, drag, typing, scrolling).
+  Motion marks *events*.
+- **One effect per event.** A dialog unrolls; it doesn't also slide and
+  shake.
+- **Periodic motion runs on timers**, not repeating animations (PITFALLS
+  §17). Clips do too: `animate::play` ticks at 25fps only while playing.
+- **Reduced motion:** every clip returns "done" — the end state renders
+  immediately; blinks go solid.
 
 ```rust
-el.with_animation("reveal", Animation::new(motion::BASE).with_easing(motion::steps(5)), |el, t| el.opacity(t))
+// Any element: plays on first render and whenever the key changes.
+let p = animate::play("status", &message, motion::BASE, window, cx);
+div().child(animate::scramble(&message, p))
+
+// Or the drop-in elements:
+decrypt("status", message)
+shake("name", error_count, field)
+unroll_in("page", page_index, content)
 ```
-
-No springs, no long ease-out curves, no bounces. **Reduced motion:** check
-`motion::reduced(cx)` and render the end state — blinks go solid, stepped
-reveals go instant, tickers stop.
-
----
 
 ## 7. Window chrome
 

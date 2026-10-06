@@ -204,6 +204,11 @@ impl RenderOnce for Switch {
             (false, false) => (p.line_strong, p.fg_dim),
         };
 
+        // The thumb travels in eased steps rather than jumping: 2px (off) to
+        // 20px (on) inside the 34px track.
+        let travel = crate::animate::play_on_change((self.id.clone(), "thumb"), on, crate::motion::FAST, window, cx).eased();
+        let (from, to) = if on { (2., 20.) } else { (20., 2.) };
+        let thumb_x = (from + (to - from) * travel).round();
         let track = div()
             .relative()
             .w(px(36.))
@@ -226,7 +231,7 @@ impl RenderOnce for Switch {
                     .top(px(2.))
                     .size(px(12.))
                     .bg(hsla(thumb))
-                    .map(|el| if on { el.right(px(2.)) } else { el.left(px(2.)) }),
+                    .left(px(thumb_x)),
             );
 
         div()

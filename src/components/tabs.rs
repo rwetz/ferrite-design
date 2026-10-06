@@ -57,6 +57,7 @@ impl Tabs {
 impl RenderOnce for Tabs {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
+        let bar = crate::animate::play_on_change("bar", self.selected, crate::motion::BASE, window, cx).eased();
         let count = self.items.len();
         let mut row = div()
             .id(self.id.clone())
@@ -105,7 +106,10 @@ impl RenderOnce for Tabs {
                     // gpui has no per-side border colors, so the amber top
                     // edge is its own 2px bar.
                     .when(active, |el| {
-                        el.child(div().absolute().top_0().left_0().right_0().h(px(2.)).bg(hsla(p.accent)))
+                        // Grows out from the centre in eased steps when the
+                        // selection lands here.
+                        let w = bar;
+                        el.child(div().absolute().top_0().left(gpui::relative((1. - w) / 2.)).w(gpui::relative(w)).h(px(2.)).bg(hsla(p.accent)))
                     })
                     .display(Scale::X1, window)
                     .child(label.to_uppercase())

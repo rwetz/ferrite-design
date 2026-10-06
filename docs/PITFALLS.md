@@ -365,3 +365,22 @@ whatever contains it (§25). It *does* bind Enter (→ `Submit` event): a
 container that wants Enter (the palette) must listen for that event rather
 than bind Enter itself, because the deeper binding wins.
 
+## 38. Animations: one keyed clip per element, timers only while playing
+
+`animate::play` keeps its clock in keyed element state and spawns a
+25fps timer that notifies the view until the clip finishes, then stops —
+an idle window does no work, unlike a repeating `with_animation` (§17).
+Two consequences:
+- The clip lives as long as the element renders in consecutive frames.
+  Something that stops rendering (a closed menu) starts fresh next time —
+  which is exactly what open animations want.
+- To *replay* with an unchanged key (a demo button), change the element's
+  id, not just the key: `decrypt(("demo", replays), text)`.
+
+## 39. Testing note: animations finish before a slow capture
+
+A PrintWindow grab takes ~85ms here, two animation frames. The key and click
+helpers also sleep afterwards, so by the first capture a 200ms open
+animation is nearly done. Post the raw input yourself and grab immediately
+in a loop to see the intermediate frames.
+

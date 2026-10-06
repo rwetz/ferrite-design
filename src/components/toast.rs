@@ -54,6 +54,8 @@ pub const MAX_VISIBLE: usize = 4;
 pub const SEGMENTS: u32 = 16;
 /// Entry frames: dither levels laid over the toast in its own fill.
 const ENTRY: [f32; 3] = [dither::level::DARK, dither::level::MEDIUM, dither::level::LIGHT];
+/// Entry slide, px from the resting position, per entry frame.
+const SLIDE: [f32; 3] = [40., 14., 4.];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ToastKind {
@@ -423,6 +425,8 @@ impl Render for Toaster {
                 .when_some(entry, |el, frame| {
                     el.child(div().absolute().inset_0().child(dither(dither::flat(ENTRY[frame])).ink(hsla(p.raised)).size_full()))
                 });
+            // …and steps in from the right in big-then-small bites.
+            let card = crate::animate::nudge(card, point(px(entry.map_or(0., |f| SLIDE[f])), px(0.)));
 
             let label: SharedString = match &t.message {
                 Some(m) => format!("{} {}: {}", t.kind.code(), t.title, m).into(),

@@ -46,6 +46,7 @@ See every one of them live: `cargo run --example components`.
 | **`virtual_list`** | `components::scroll` | renders only visible rows (gpui `uniform_list`), with the Ferrite scrollbar |
 | **`split`** | `components::split` | draggable 1px divider, fraction state, min sizes, double-click resets |
 | **`window_frame`** | `chrome` | Linux client-decoration frame + resize edges; passthrough elsewhere |
+| **`decrypt` / `typewriter` / `shake` / `dissolve` / `count_up` / `unroll_in`** | `components::fx` | drop-in motion effects on `animate` (DESIGN_LANGUAGE §6) |
 | **`Icon`** | `icon` | 21 pixel icons on the type grid; `fit()` for fixed-height controls |
 | **`spinner` / `cursor` / `ticker`** | `components::ticker` | timer-driven periodic state (no per-frame redraws) |
 | `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing |

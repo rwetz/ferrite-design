@@ -113,9 +113,23 @@ pub(crate) fn surface(body: impl IntoElement, cx: &App) -> gpui::Div {
 pub(crate) const SCRIM: f32 = 0.6875;
 
 /// The modal backdrop: the app behind screen-doored into the page color.
-/// Never a blur, never a tint.
-pub(crate) fn scrim(cx: &App) -> impl IntoElement {
-    dither(dither::flat(SCRIM)).ink(hsla(palette(cx).bg)).size_full()
+/// Never a blur, never a tint. `t` (0–1) steps the density up as a modal
+/// opens — the screen door closing — snapped to Bayer steps.
+pub(crate) fn scrim(t: f32, cx: &App) -> impl IntoElement {
+    let level = ((SCRIM * t.clamp(0., 1.)) * 16.).round() / 16.;
+    dither(dither::flat(level)).ink(hsla(palette(cx).bg)).size_full()
+}
+
+/// The open animation every floating surface shares: it unrolls top-down
+/// with an amber scan edge (menus and popovers in `FAST`, modals in
+/// `BASE`). Plays once when the surface appears.
+pub(crate) fn reveal(el: impl IntoElement, duration: std::time::Duration, window: &mut Window, cx: &mut App) -> AnyElement {
+    let p = crate::animate::play("reveal", 0u8, duration, window, cx);
+    if p.done {
+        el.into_any_element()
+    } else {
+        crate::animate::unroll(el, p.eased()).edge(hsla(palette(cx).accent)).into_any_element()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -294,7 +308,7 @@ impl RenderOnce for Popover {
                     let state = state.clone();
                     move |_, window, cx| state.update(cx, |s, cx| s.close(window, cx))
                 })
-                .child(surface(body, cx));
+                .child(reveal(surface(body, cx), crate::motion::FAST, window, cx));
             root = root.child(below(self.align, panel));
         }
         root

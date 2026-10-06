@@ -13,6 +13,9 @@
 //!
 //! Reduced motion: check [`reduced`] and render the final state. Blinks
 //! become solid, stepped reveals become instant.
+//!
+//! The engine that plays stepped clips, and the effects built on it, live
+//! in [`crate::animate`] (and as drop-in elements in `components::fx`).
 
 use std::time::Duration;
 
