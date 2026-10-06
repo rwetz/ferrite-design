@@ -53,3 +53,16 @@ name = "minimal"
 
 [[example]]
 name = "components"
+
+# App templates: whole apps to copy from (AGENTS.md, scripts/new-app.sh).
+[[example]]
+name = "app_dashboard"
+
+[[example]]
+name = "app_workbench"
+
+[[example]]
+name = "app_settings"
+
+[[example]]
+name = "app_explorer"
