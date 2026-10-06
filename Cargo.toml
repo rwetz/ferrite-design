@@ -23,6 +23,12 @@ unicode-segmentation = "1"
 image = { version = "0.25", default-features = false }
 raw-window-handle = "0.6"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# macOS only: `font-kit` is gpui's macOS text system. Without it gpui-pre-macos
+# swaps in a no-op one and renders no text at all, warning only through `log`
+# (PITFALLS 41). Merges with the gpui_platform entry above, for macOS builds.
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 # Same major as gpui's own windows dependency; used only to opt out of
 # Windows 11's forced rounded corners (see chrome::square_corners).

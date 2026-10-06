@@ -395,3 +395,21 @@ few seconds, on the busiest page, against the previous commit — the
 gallery's debug-build baseline is ~17% (its 10fps spinner re-renders
 the whole view).
 
+
+## 41. macOS: no text at all without gpui's `font-kit` feature — ✅ handled
+
+`gpui-pre-platform` leaves `font-kit` off by default, and without it
+gpui-pre-macos installs a no-op text system: every glyph is dropped, the
+font list is empty, and the only signal is a `log::warn!` that nothing
+prints. Shapes, dither and pixel icons still draw, so a window looks like
+an unlabeled wireframe — and `minimal`, being mostly text, looks blank.
+Cargo.toml turns the feature on in a `cfg(target_os = "macos")` section, so
+Windows and Linux builds are unchanged. Found 2026-10-06, macOS 27.0.1.
+
+## 42. macOS: Xcode 27 needs the Metal Toolchain to build gpui
+
+gpui compiles its Metal shaders at build time, and Xcode 27 no longer
+bundles the compiler. The build fails in `gpui-pre-apple`'s build script
+with "missing Metal Toolchain". One-time fix per machine (~840 MB):
+
+    xcodebuild -downloadComponent MetalToolchain
