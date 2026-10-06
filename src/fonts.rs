@@ -167,6 +167,7 @@ mod tests {
             " ░▒▓█",             // ascii::RAMP
             "─│┌┐└┘═║",          // ascii::boxes
             "·",                 // ascii::bar
+            "▲▼",                // table sort arrows
             "»×■●↑",             // glyphs used in the examples
         );
         let missing: String = used.chars().filter(|c| !display_has(*c)).collect();

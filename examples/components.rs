@@ -15,6 +15,7 @@ use ferrite_design::{
     components::{
         Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
+        SortDir, column, dialog, segmented, slider, table, tree, tree_node,
     },
     icon::icon,
     motion, palette, theme,
@@ -22,7 +23,7 @@ use ferrite_design::{
 };
 use gpui::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render,
-    SharedString, StatefulInteractiveElement as _, Styled, Subscription, Window, div, px, size,
+    SharedString, StatefulInteractiveElement as _, Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, size,
 };
 use gpui_component::{
     Root,
@@ -40,6 +41,30 @@ const FILES: [(Icon, &str, &str); 5] = [
 ];
 const PROCS: [(&str, &str); 4] = [("ferrite-atlas", "pid 4412"), ("cargo", "pid 9021"), ("rust-analyzer", "pid 3310"), ("showcase", "pid 7777")];
 const MODES: [&str; 3] = ["Fast", "Balanced", "Thorough"];
+const PAGES: [&str; 2] = ["Controls", "Data & input"];
+const PROC_TABLE: [(&str, u32, f32, u32, &str); 6] = [
+    ("ferrite-atlas", 4412, 31.0, 412, "run"),
+    ("cargo", 9021, 12.4, 188, "run"),
+    ("rust-analyzer", 3310, 4.2, 1630, "idle"),
+    ("showcase", 7777, 0.8, 96, "idle"),
+    ("dither-bake", 5120, 57.3, 64, "run"),
+    ("sshd", 612, 0.0, 12, "sleep"),
+];
+
+#[derive(Clone, Copy)]
+struct Proc {
+    name: &'static str,
+    pid: u32,
+    cpu: f32,
+    mem: u32,
+    state: &'static str,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Modal {
+    Delete,
+    Rename,
+}
 
 struct Components {
     clicks: u32,
@@ -58,6 +83,15 @@ struct Components {
     hide_merged: bool,
     only_mine: bool,
     compact: bool,
+    page: usize,
+    density: usize,
+    volume: f32,
+    gamma: f32,
+    tree_sel: Option<SharedString>,
+    procs: Vec<Proc>,
+    sort: Option<(usize, SortDir)>,
+    proc_sel: Option<usize>,
+    dialog: Option<Modal>,
     palette: Entity<CommandPalette>,
     toaster: Entity<Toaster>,
     _appearance: Subscription,
@@ -94,6 +128,15 @@ impl Components {
             hide_merged: true,
             only_mine: false,
             compact: false,
+            page: 0,
+            density: 1,
+            volume: 65.,
+            gamma: 1.0,
+            tree_sel: Some("src/components/menu.rs".into()),
+            procs: PROC_TABLE.iter().map(|&(name, pid, cpu, mem, state)| Proc { name, pid, cpu, mem, state }).collect(),
+            sort: None,
+            proc_sel: Some(1),
+            dialog: None,
             palette: Self::build_palette(window, cx),
             toaster: cx.new(|_| Toaster::new()),
             _appearance: theme::follow_system(window),
@@ -196,6 +239,269 @@ impl Components {
             });
         })
         .detach();
+    }
+}
+
+impl Components {
+    fn sort_procs(&mut self) {
+        let Some((col, dir)) = self.sort else { return };
+        let selected = self.proc_sel.map(|i| self.procs[i].pid);
+        self.procs.sort_by(|a, b| {
+            let o = match col {
+                0 => a.name.cmp(b.name),
+                1 => a.pid.cmp(&b.pid),
+                2 => a.cpu.total_cmp(&b.cpu),
+                3 => a.mem.cmp(&b.mem),
+                _ => a.state.cmp(b.state),
+            };
+            if dir == SortDir::Desc { o.reverse() } else { o }
+        });
+        // Selection follows the row, not the index.
+        self.proc_sel = selected.and_then(|pid| self.procs.iter().position(|p| p.pid == pid));
+    }
+
+    fn data_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        let this = cx.weak_entity();
+        let set = |f: fn(&mut Components, &mut Context<Components>)| {
+            let this = this.clone();
+            move |_: &mut Window, cx: &mut App| {
+                let _ = this.update(cx, |v, cx| {
+                    f(v, cx);
+                    cx.notify();
+                });
+            }
+        };
+
+        // ── Input ────────────────────────────────────────────────────────
+        let label = |t: &'static str| div().w(px(96.)).body(text::SM).text_color(hsla(p.fg_dim)).child(t);
+        let input = panel("Input").meta("segmented · slider").flex_1().child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(section("segmented", window, cx))
+                .child(
+                    row().child(
+                        segmented("density")
+                            .option("Compact")
+                            .option("Cozy")
+                            .option("Roomy")
+                            .selected(self.density)
+                            .on_select({
+                                let this = this.clone();
+                                move |i, _, cx| {
+                                    let i = *i;
+                                    let _ = this.update(cx, |v, cx| {
+                                        v.density = i;
+                                        v.log(format!("DENSITY {}", ["COMPACT", "COZY", "ROOMY"][i]), cx);
+                                    });
+                                }
+                            }),
+                    ),
+                )
+                .child(
+                    row().child(
+                        segmented("view")
+                            .option_with_icon("List", Icon::Menu)
+                            .option_with_icon("Files", Icon::Folder)
+                            .selected(0)
+                            .disabled(true),
+                    ),
+                )
+                .child(section("slider", window, cx))
+                .child(
+                    row().child(label("Volume")).child(
+                        slider("volume")
+                            .label("Volume")
+                            .range(0., 100.)
+                            .step(5.)
+                            .value(self.volume)
+                            .format(|v| format!("{v:.0}%").into())
+                            .on_change({
+                                let this = this.clone();
+                                move |v, _, cx| {
+                                    let v = *v;
+                                    let _ = this.update(cx, |c, cx| {
+                                        c.volume = v;
+                                        c.log(format!("VOLUME {v:.0}"), cx);
+                                    });
+                                }
+                            }),
+                    ),
+                )
+                .child(
+                    row().child(label("Gamma")).child(
+                        slider("gamma")
+                            .label("Gamma")
+                            .range(0.5, 2.5)
+                            .step(0.25)
+                            .value(self.gamma)
+                            .width(px(160.))
+                            .on_change({
+                                let this = this.clone();
+                                move |v, _, cx| {
+                                    let v = *v;
+                                    let _ = this.update(cx, |c, cx| {
+                                        c.gamma = v;
+                                        c.log(format!("GAMMA {v:.2}"), cx);
+                                    });
+                                }
+                            }),
+                    ),
+                )
+                .child(row().child(label("Locked")).child(slider("locked").label("Locked").value(30.).disabled(true))),
+        );
+
+        // ── Dialog ───────────────────────────────────────────────────────
+        let open_modal = |m: Modal| {
+            let this = this.clone();
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
+                let _ = this.update(cx, |v, cx| {
+                    v.dialog = Some(m);
+                    cx.notify();
+                });
+            }
+        };
+        let close = set(|v, _| v.dialog = None);
+        let dialogs = panel("Dialog").meta("modal · screen-door backdrop").flex_1().child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(section("confirm", window, cx))
+                .child(
+                    row()
+                        .child(Button::new("open-delete").label("Delete files").icon(Icon::Trash).danger().on_click(open_modal(Modal::Delete)))
+                        .child(Button::new("open-rename").label("Rename").icon(Icon::File).on_click(open_modal(Modal::Rename))),
+                )
+                .child(
+                    div()
+                        .body(text::SM)
+                        .text_color(hsla(p.fg_dim))
+                        .child("Esc, a click on the backdrop, or Cancel close it. Enter confirms."),
+                )
+                .child(
+                    dialog("delete-dialog")
+                        .open(self.dialog == Some(Modal::Delete))
+                        .title("Delete 3 files?")
+                        .description("dither.rs, tokens.rs and Cargo.toml will be removed from disk. This can't be undone.")
+                        .danger()
+                        .confirm("Delete", set(|v, cx| v.log("DELETED 3 FILES", cx)))
+                        .cancel("Keep")
+                        .on_close(close.clone()),
+                )
+                .child(
+                    dialog("rename-dialog")
+                        .open(self.dialog == Some(Modal::Rename))
+                        .title("Rename")
+                        .description("Applies to the selected file and every import of it.")
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap_2()
+                                        .px_2()
+                                        .h(px(32.))
+                                        .bg(hsla(p.sunken))
+                                        .border_1()
+                                        .border_color(hsla(p.line_strong))
+                                        .child(div().display(Scale::X1, window).text_color(hsla(p.accent)).child(">"))
+                                        .child(div().body(text::BASE).child("menu.rs"))
+                                        .child(cursor("rename-cursor")),
+                                )
+                                .child(checkbox("rename-imports").label("Update imports").checked(true)),
+                        )
+                        .confirm("Rename", set(|v, cx| v.log("RENAMED", cx)))
+                        .on_close(close),
+                ),
+        );
+
+        // ── Tree ─────────────────────────────────────────────────────────
+        let leaf = |path: &'static str, name: &'static str, size: &'static str| tree_node(path, name).icon(Icon::File).meta(size);
+        let files = tree("files")
+            .expanded(["src", "src/components", "docs"])
+            .selected(self.tree_sel.clone())
+            .node(
+                tree_node("src", "src/")
+                    .icon(Icon::Folder)
+                    .child(
+                        tree_node("src/components", "components/")
+                            .icon(Icon::Folder)
+                            .child(leaf("src/components/button.rs", "button.rs", "11.2 KB"))
+                            .child(leaf("src/components/dialog.rs", "dialog.rs", "8.9 KB"))
+                            .child(leaf("src/components/menu.rs", "menu.rs", "21.4 KB"))
+                            .child(leaf("src/components/tree.rs", "tree.rs", "12.0 KB")),
+                    )
+                    .child(leaf("src/dither.rs", "dither.rs", "9.8 KB"))
+                    .child(leaf("src/lib.rs", "lib.rs", "1.6 KB")),
+            )
+            .node(
+                tree_node("docs", "docs/")
+                    .icon(Icon::Folder)
+                    .child(leaf("docs/DESIGN_LANGUAGE.md", "DESIGN_LANGUAGE.md", "18.1 KB"))
+                    .child(tree_node("docs/img", "img/").icon(Icon::Folder).child(leaf("docs/img/palette.png", "palette.png", "212 KB"))),
+            )
+            .node(leaf("Cargo.toml", "Cargo.toml", "1.0 KB"))
+            .on_select({
+                let this = this.clone();
+                move |id, _, cx| {
+                    let id = id.clone();
+                    let _ = this.update(cx, |v, cx| {
+                        v.log(format!("SELECT {}", id.to_uppercase()), cx);
+                        v.tree_sel = Some(id);
+                    });
+                }
+            });
+        let tree_panel = panel("Tree").meta("expand · collapse with arrows").flex_1().child(files);
+
+        // ── Table ────────────────────────────────────────────────────────
+        let procs = table("procs")
+            .column(column("Name").sortable())
+            .column(column("PID").width(px(80.)).align_right().sortable())
+            .column(column("CPU").width(px(88.)).align_right().sortable())
+            .column(column("Mem").width(px(96.)).align_right().sortable())
+            .column(column("State").width(px(88.)).sortable())
+            .rows(self.procs.iter().map(|p| {
+                [p.name.to_string(), p.pid.to_string(), format!("{:.1}%", p.cpu), format!("{} MB", p.mem), p.state.to_string()]
+            }))
+            .sort(self.sort)
+            .selected(self.proc_sel)
+            .on_sort({
+                let this = this.clone();
+                move |&(col, dir), _, cx| {
+                    let _ = this.update(cx, |v, cx| {
+                        v.sort = Some((col, dir));
+                        v.sort_procs();
+                        let arrow = if dir == SortDir::Asc { "ASC" } else { "DESC" };
+                        v.log(format!("SORT {} {arrow}", ["NAME", "PID", "CPU", "MEM", "STATE"][col]), cx);
+                    });
+                }
+            })
+            .on_select({
+                let this = this.clone();
+                move |&i, _, cx| {
+                    let _ = this.update(cx, |v, cx| {
+                        v.proc_sel = Some(i);
+                        let name = v.procs[i].name.to_uppercase();
+                        v.log(format!("PROC {name}"), cx);
+                    });
+                }
+            });
+        let table_panel = panel("Table").meta("click a header to sort").flex_1().child(procs);
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(space::ROW)
+            .child(div().flex().flex_row().gap(space::ROW).child(input).child(dialogs))
+            .child(div().flex().flex_row().gap(space::ROW).child(tree_panel).child(table_panel))
     }
 }
 
@@ -540,6 +846,7 @@ impl Render for Components {
             })),
         );
 
+        let data_page = self.data_page(window, cx);
         div()
             .flex()
             .flex_col()
@@ -560,6 +867,24 @@ impl Render for Components {
                         .flex_col()
                         .p(space::ROW)
                         .gap(space::ROW)
+                        .child(
+                            tabs("pages")
+                                .tab(PAGES[0])
+                                .tab(PAGES[1])
+                                .selected(self.page)
+                                .on_select({
+                                    let this = cx.weak_entity();
+                                    move |i: &usize, _, cx| {
+                                        let i = *i;
+                                        let _ = this.update(cx, |v, cx| {
+                                            v.page = i;
+                                            cx.notify();
+                                        });
+                                    }
+                                }),
+                        )
+                        .when(self.page == 1, |el| el.child(data_page))
+                        .when(self.page == 0, |el| el.child(div().flex().flex_col().gap(space::ROW)
                         .child(buttons)
                         .child(div().flex().flex_row().gap(space::ROW).child(toggles).child(status))
                         .child(div().flex().flex_row().gap(space::ROW)
@@ -567,7 +892,7 @@ impl Render for Components {
                             .child(div().flex_1().child(versus)))
                         .child(div().flex().flex_row().gap(space::ROW)
                             .child(div().flex_1().child(overlays))
-                            .child(div().flex_1().child(icons))),
+                            .child(div().flex_1().child(icons))))),
                 ),
             )
             .child(

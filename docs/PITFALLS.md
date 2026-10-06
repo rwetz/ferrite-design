@@ -320,3 +320,26 @@ anchored layer, push each level down so its first row lines up with its
 parent row (fixed row heights make this exact), and put
 `on_mouse_down_out` on that row.
 
+## 32. Composite controls must take focus on click
+
+Buttons and toggles `prevent_default` on mouse down so a click doesn't
+steal focus. Copy that onto a control you *navigate with the keyboard*
+(segmented control, slider, tree, table) and the next arrow key goes to
+whatever was focused before — another slider, say. These controls call
+`prevent_default` *and* focus their own handle in the same mouse-down
+handler (`focus_visible` keeps the frame hidden for mouse users).
+
+## 33. Dragging: capture the pointer, listen on the window
+
+An element's `on_mouse_move` stops firing when the pointer leaves it, so a
+slider dragged past its end freezes short of the max. Register the move
+listener with `window.on_mouse_event` from a `canvas` paint (where you have
+the track's bounds), `capture_pointer` on mouse down, and stop when a move
+arrives without the button held.
+
+## 34. Testing note: page the gallery instead of scrolling it
+
+Posted wheel events are unreliable (§27), so the components example is
+split into pages with a `tabs` strip at the top — every component is
+reachable with a click from a maximized window.
+

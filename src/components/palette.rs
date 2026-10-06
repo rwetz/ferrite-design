@@ -40,7 +40,7 @@ use gpui::{
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 
-use super::overlay::surface;
+use super::overlay::{scrim, surface};
 use super::tooltip::kbd;
 use crate::dither::{self, dither};
 use crate::fonts::{FerriteText, Scale, display_size};
@@ -50,10 +50,6 @@ use crate::theme::palette;
 use crate::tokens::{hsla, text};
 
 actions!(ferrite_palette, [SelectPrev, SelectNext, Confirm, Dismiss, TogglePalette]);
-
-/// Scrim density: 11 of every 16 cells inked in the page color (~69%), so
-/// the app behind reads as present but clearly out of play.
-const SCRIM: f32 = 0.6875;
 
 /// The key context the palette's bindings live in.
 pub const CONTEXT: &str = "FerritePalette";
@@ -470,7 +466,7 @@ impl Render for CommandPalette {
                             .absolute()
                             .inset_0()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.close(window, cx)))
-                            .child(dither(dither::flat(SCRIM)).ink(hsla(p.bg)).size_full()),
+                            .child(scrim(cx)),
                     )
                     .child(
                         div()

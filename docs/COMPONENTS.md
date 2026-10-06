@@ -35,6 +35,11 @@ See every one of them live: `cargo run --example components`.
 | **`dropdown_menu` / `context_menu`** | `components::menu` | icons, shortcuts, check toggles, section labels, separators, danger + disabled rows, nested `submenu`s (open on hover, → / ← / Esc per level, cascade snaps on screen as one); full keyboard nav |
 | **`CommandPalette`** | `components::palette` | modal, fuzzy-ranked (`fuzzy`), grouped when empty, amber match highlights, screen-door scrim; wraps gpui-component's `Input` for the text field |
 | **`Toaster` / `toast`** | `components::toast` | bottom-right stack of up to 4; info/success/warning/danger with pixel icon + `INFO OK WARN ERR` code; stepped 16-segment countdown, paused on hover; dither materialise on entry; optional action; sticky |
+| **`dialog`** | `components::dialog` | controlled modal: `[ TITLE ]` header, description + any content, cancel (Esc) / confirm (Enter) footer, screen-door backdrop; `.danger()` for destructive confirms |
+| **`segmented`** | `components::segmented` | one-of-few strip, selected segment in inverse video; ←/→ move |
+| **`slider`** | `components::slider` | discrete LED-cell track snapped to `step`, tall thumb cell, fixed-width readout; drag with pointer capture, arrows/PageUp/Home/End |
+| **`tree`** | `components::tree` | 1px connector guides (├ └ │), chevrons, owns its expansion; →/← expand, collapse, step in/out |
+| **`table`** | `components::table` | display-face header with ▲/▼ sort marks, right-aligned numeric columns, row selection; for up to a few hundred rows |
 | **`Icon`** | `icon` | 21 pixel icons on the type grid; `fit()` for fixed-height controls |
 | **`spinner` / `cursor` / `ticker`** | `components::ticker` | timer-driven periodic state (no per-frame redraws) |
 | `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing |
@@ -46,9 +51,12 @@ activation (gpui's keyboard click), no focus-steal on mouse down, a
 keyboard-only focus frame (`focus_visible`), and an accessibility
 role/label/toggled state.
 
-**Known gap:** gpui exposes no accessibility "disabled" state. Disabled
-controls drop out of the tab order and ignore input, but screen readers
-aren't told they're disabled.
+**Known gaps:**
+- gpui exposes no accessibility "disabled" state. Disabled controls drop out
+  of the tab order and ignore input, but screen readers aren't told they're
+  disabled.
+- gpui has no focus scope, so a `dialog` can't trap Tab: it can walk out to
+  elements behind the backdrop (which still can't be clicked).
 
 ## Replacement order
 
@@ -61,7 +69,8 @@ aren't told they're disabled.
 | 5 | `Tooltip` / `Popover` / menus | ✅ native — tooltip, popover, dropdown + context menu with submenus |
 | 6 | `Tab` / `TabBar` | ✅ native (+ `list_item`) |
 | 7 | `Input` | **last, if ever** — IME, selection, undo |
-| — | `List`, `Table`, `VirtualList`, `Dock`, `Resizable` | keep wrapping; put `list_item` rows inside the library's virtual list |
+| 8 | `Dialog` / `Slider` / `Tree` / small `Table` | ✅ native (+ `segmented`) |
+| — | `VirtualList`, virtual `Table`, `Dock`, `Resizable` | keep wrapping; put `list_item` rows inside the library's virtual list |
 
 The overlay set is complete. Next up: **`window_border`** once there's a
 Linux machine to verify it on.

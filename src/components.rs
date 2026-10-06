@@ -6,28 +6,38 @@
 //! widgets inside Ferrite frames today.
 
 pub mod button;
+pub mod dialog;
 pub mod list;
 pub mod menu;
 pub mod overlay;
 pub mod palette;
+pub mod segmented;
+pub mod slider;
+pub mod table;
 pub mod tabs;
 pub mod tag;
 pub mod ticker;
 pub mod toast;
 pub mod toggle;
+pub mod tree;
 pub mod tooltip;
 
 pub use button::Button;
+pub use dialog::{Dialog, dialog};
 pub use list::{ListItem, list_item};
 pub use menu::{Menu, MenuItem, Submenu, context_menu, dropdown_menu, menu_item, submenu};
 pub use overlay::{Align, Popover, popover};
 pub use palette::{CommandPalette, PaletteCommand, TogglePalette, command};
+pub use segmented::{Segmented, segmented};
+pub use slider::{Slider, slider};
+pub use table::{Column, SortDir, Table, column, table};
 pub use tabs::{Tabs, tabs};
 pub use tag::{Meter, Tag, meter, tag};
 pub use toggle::{Switch, Toggle, checkbox, radio, switch};
 pub use ticker::{Cursor, Spinner, cursor, spinner, ticker};
 pub use toast::{Toast, ToastId, ToastKind, Toaster, toast};
 pub use tooltip::{Kbd, Tooltip, kbd, tooltip};
+pub use tree::{Tree, TreeNode, tree, tree_node};
 
 use gpui::{
     AnyElement, App, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,

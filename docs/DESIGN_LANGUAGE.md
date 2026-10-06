@@ -268,6 +268,11 @@ The control grammar, in one place:
 | keyboard focus | 1px amber frame, keyboard-only (`focus_visible`) |
 | floating surface | `raised` fill, 1px `line_strong` frame, hard 4px dithered drop shadow |
 | modal | the app behind is **screen-doored** — an 11/16 (~69%) dither in the page color — never blurred or tinted |
+| dialog | modal: `[ TITLE ]` header with a dither rule, footer buttons with their keys (Esc / Enter); destructive = danger header + warning icon |
+| slider | a row of 6px LED cells snapped to the step, the thumb one tall foreground cell; readout in the display face at a fixed width |
+| segmented | one framed strip, selected segment inverse video (amber block) |
+| tree | 1px connector guides in `line_strong`, centred under the parent's chevron — never box-drawing glyphs, which break between rows |
+| table | display-face header on `surface` with a `line_strong` rule; ▲/▼ in amber on the sorted column; numbers right-aligned |
 | submenu | opens to the right, instantly on hover, first row level with its parent row; parent row stays highlighted; `>` chevron marks the row |
 | notification | toast: floating surface + 2px tone bar on the left, display-face code (`INFO OK WARN ERR`), countdown drained in 16 steps along the bottom edge |
 | match highlight | matched characters in `accent_text`, nothing else |

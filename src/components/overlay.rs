@@ -108,6 +108,16 @@ pub(crate) fn surface(body: impl IntoElement, cx: &App) -> gpui::Div {
         )
 }
 
+/// Modal scrim density: 11 of every 16 cells inked in the page color
+/// (~69%), so the app behind reads as present but clearly out of play.
+pub(crate) const SCRIM: f32 = 0.6875;
+
+/// The modal backdrop: the app behind screen-doored into the page color.
+/// Never a blur, never a tint.
+pub(crate) fn scrim(cx: &App) -> impl IntoElement {
+    dither(dither::flat(SCRIM)).ink(hsla(palette(cx).bg)).size_full()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Align {
     /// Surface's left edge under the trigger's left edge.
