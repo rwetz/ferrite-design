@@ -470,3 +470,25 @@ Anything dense is now painted instead of typeset: the mark is dither
 glyphs out of text you render yourself; use `dither(..)` or quads. Thin
 box-drawing glyphs and ASCII are fine.
 
+## 48. A full-window dither stepping through levels rasterises the window — ✅ handled
+
+A `dither` is a cached bitmap the size of its element. A modal scrim steps
+its density up 11 levels as it opens, and a theme glitch or flash veil does
+the same: each new level used to rasterise and upload a window-sized image
+(~5M device pixels at 4K) mid-animation, which hitched the dialog's open.
+Flat fields (one level, Bayer or blue noise) larger than 256 device px now
+paint one cached tile — a whole number of pattern periods — repeated under
+a content mask, so a new level costs a 256×256 raster. Ramps and pictures
+still rasterise at full size; don't animate those across a whole window.
+
+## 49. Animations re-render the whole view, every frame
+
+A clip notifies the *view* it was played in, so while it runs that view
+re-renders at the refresh rate (240fps by default). In a big view — the
+gallery's Motion page — at `opt-level = 0` that was ~5ms per frame: a
+dialog open cost ~330ms of CPU and the click felt laggy. This repo builds
+itself at `opt-level = 1` in dev (~3x cheaper, same compile time); apps get
+Ferrite at 3 through `[profile.dev.package."*"]`. If an app's own root view
+is huge, split the busy parts into their own entities so a clip in one
+doesn't re-render the rest, or lower the rate with `motion::set_fps`.
+

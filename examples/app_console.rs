@@ -232,7 +232,7 @@ impl Render for Console {
 
         window_frame().child(power_on_in(
             "power",
-            div()
+            boot_screen("boot", div()
                 .flex()
                 .flex_col()
                 .size_full()
@@ -251,6 +251,8 @@ impl Render for Console {
                         .right_live(format!("{warns} WARN"))
                         .right_live(format!("{errors} ERR")),
                 ),
+            )
+            .title("Console"),
         ))
     }
 }

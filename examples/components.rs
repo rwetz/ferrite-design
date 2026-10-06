@@ -13,7 +13,7 @@ use ferrite_design::{
     Appearance, FerriteText, Icon, Scale,
     chrome::{self, title_bar},
     components::{
-        Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
+        Align, Button, CommandPalette, boot_screen, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
         InputEvent, SortDir, TextInput, Date, Presence, accordion, accordion_section, alert, avatar, bar_chart, breadcrumb,
         calendar, cascade_in, date_picker, drawer, event, field, flash, heatmap, line_chart, number_input, pagination,
@@ -82,7 +82,7 @@ struct Components {
     tick: u64,
     inputs: Vec<Entity<TextInput>>,
     name_errors: u32,
-    replay: [u32; 24],
+    replay: [u32; 26],
     // Forms
     region: Option<usize>,
     workers: f64,
@@ -180,7 +180,7 @@ impl Components {
             tick: 0,
             inputs,
             name_errors: 0,
-            replay: [0; 24],
+            replay: [0; 26],
             region: Some(0),
             workers: 8.,
             timeout: 2.5,
@@ -471,6 +471,26 @@ impl Components {
                 div().h(px(20.)).px_2().flex().items_center().bg(hsla(p.raised)).body(text::SM).text_color(hsla(p.fg_dim)).child(*l)
             }));
         let boot_demo = div().w(px(260.)).child(panel(format!("Uplink {}", r[19] + 1)).meta("ok").child(div().body(text::SM).text_color(hsla(p.fg_dim)).child("title decrypts, rule draws on")));
+        let glitch_demo = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .items_center()
+            .child(Button::new("m-glitch").label("Next scheme").icon(Icon::Refresh).small().on_click(|_, _, cx| {
+                let schemes = &ferrite_design::SCHEMES;
+                let i = schemes.iter().position(|s| s.key == theme::scheme(cx).key).unwrap_or(0);
+                theme::set_scheme(&schemes[(i + 1) % schemes.len()], cx);
+            }))
+            .child(div().body(text::XS).text_color(hsla(p.fg_faint)).child("the old palette tears away in strips"));
+        let menu_demo = dropdown_menu("m-menu")
+            .trigger(Button::new("m-menu-trigger").label("Open menu").icon(Icon::Menu).small())
+            .label("File")
+            .item(menu_item("New file").icon(Icon::Plus).shortcut("Ctrl+N"))
+            .item(menu_item("Open…").icon(Icon::Folder).shortcut("Ctrl+O"))
+            .submenu(submenu("Open recent").item(menu_item("ferrite-design")).item(menu_item("nexis-design")).item(menu_item("logscope")))
+            .separator()
+            .item(menu_item("Save").shortcut("Ctrl+S"))
+            .item(menu_item("Close window").shortcut("Ctrl+W"));
         let on = r[17].is_multiple_of(2);
         let toggles_demo = div()
             .flex()
@@ -578,7 +598,48 @@ impl Components {
                 div().flex().flex_row().gap(space::ROW)
                     .child(tile(15, "Flash", "look here · any element", flash_demo.into_any_element()))
                     .child(tile(16, "Cascade", "items one frame apart", cascade_demo.into_any_element()))
-                    .child(tile(19, "Boot", "panel headers", boot_demo.into_any_element())),
+                    .child(tile(19, "Header boot", "panel headers", boot_demo.into_any_element())),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .gap(space::ROW)
+                    .child(
+                        panel("Boot screen").meta("launch · opt-in · any key skips").flex_1().child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_3()
+                                .child(
+                                    div().h(px(300.)).border_1().border_color(hsla(p.line_strong)).child(
+                                        boot_screen(
+                                            ("m-boot", r[24] as usize),
+                                            div()
+                                                .size_full()
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .bg(hsla(p.raised))
+                                                .display(Scale::X2, window)
+                                                .text_color(hsla(p.accent_text))
+                                                .child("READY."),
+                                        )
+                                        .title("Gallery"),
+                                    ),
+                                )
+                                .child(div().flex().flex_row().justify_end().child(replay(24))),
+                        ),
+                    )
+                    .child(
+                        div()
+                            .w(px(440.))
+                            .flex()
+                            .flex_col()
+                            .gap(space::ROW)
+                            .child(tile(25, "Glitch", "scheme · tone switches", glitch_demo.into_any_element()))
+                            .child(tile(23, "Menu cascade", "rows decrypt a beat apart", menu_demo.into_any_element())),
+                    ),
             )
             .child(rule(Some("motion inside the components"), window, cx))
             .child(

@@ -70,7 +70,8 @@ Combine templates; every piece below is a component in the prelude.
 - **Retro / terminal-styled tool** (a BBS client, a hardware monitor, a
   game launcher) — `minimal` or `console`, framed with `ascii_box` instead
   of `panel`, a `banner` title, `ascii_gauge`s for readouts, `ascii_art`
-  for a splash, and `motion::set_fps(25)` for the stepped look.
+  for a splash, `boot_screen` inside `power_on_in` for a POST at launch,
+  and `motion::set_fps(25)` for the stepped look.
 - **Kanban / tracker** — `explorer` data + columns of `panel`s with
   `list_item` cards; `steps` or `tag`s for status; `drawer` for details.
 
@@ -248,6 +249,7 @@ decrypt(id, text)  typewriter(id, text)  count_up(id, value, |v| format!("{v:.0}
 shake(id, key, el)  tear(id, key, || el)  flash(id, key, el)  ping(id, key, marker)  scan(id, key, el)
 unroll_in(id, key, el)  wipe_in(id, key, el).from_right()  interlace_in(id, key, el)  dissolve(id, key, el)
 develop(id, key, dither(picture))  cascade_in(id, key).flex().flex_col().children(items)  power_on_in(id, root)
+boot_screen("boot", root).title("Console")   // inside power_on_in: a POST at launch, any key skips (retro apps)
 
 // Schemes and appearance
 theme::set_scheme(&SCHEMES[i], cx)   schemes::by_key("mono")   theme::set_appearance(Appearance::Light, window, cx)

@@ -377,6 +377,16 @@ fn choose(state: &Entity<OverlayState>, item: &MenuItem, window: &mut Window, cx
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
+/// How far a row's label sits left of home while it cascades in: one step
+/// per beat, then at rest.
+fn row_slide(p: crate::animate::Progress) -> Pixels {
+    const STEPS: [f32; 3] = [-6., -2., 0.];
+    if p.done {
+        return px(0.);
+    }
+    px(STEPS[(p.frame as usize).min(STEPS.len() - 1)])
+}
+
 /// One level's panel.
 fn render_level(
     entries: &[Entry],
@@ -396,8 +406,21 @@ fn render_level(
         _ => false,
     });
 
+    // Rows cascade in under the unroll: each decrypts a beat after the one
+    // above it. Keyed on the parent row, so a different submenu replays.
+    let parent = if level == 0 { None } else { path.get(level - 1).copied().flatten() };
     let mut list = div().w(width).flex().flex_col().py_1();
     for (i, entry) in entries.iter().enumerate() {
+        let cascade = crate::animate::play_after(
+            ElementId::Name(format!("menu-row-{level}-{i}").into()),
+            parent,
+            crate::animate::stagger(i),
+            crate::motion::FAST,
+            window,
+            cx,
+        );
+        // Each row churns its own noise, so the menu doesn't read as columns.
+        let churn = crate::animate::Progress { frame: cascade.frame + i as u32 * 5, ..cascade };
         list = list.child(match entry {
             Entry::Separator => div().h(px(1.)).my_1().mx_2().bg(hsla(p.line)).into_any_element(),
             Entry::Label(label) => div()
@@ -406,7 +429,7 @@ fn render_level(
                 .pt_1()
                 .display(Scale::X1, window)
                 .text_color(hsla(p.fg_faint))
-                .child(label.to_uppercase())
+                .child(crate::animate::scramble(&label.to_uppercase(), churn))
                 .into_any_element(),
             Entry::Item(_) | Entry::Submenu(_) => {
                 let (label, row_icon, shortcut, checked, danger, disabled, opens) = match entry {
@@ -452,13 +475,16 @@ fn render_level(
                         let ink = if checked == Some(true) && !disabled { p.accent_text } else { lead_ink };
                         el.child(div().size(lead).flex_shrink_0().when_some(shown, |el, l| el.child(icon(l).color(hsla(ink)))))
                     })
-                    .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(label))
+                    .child(crate::animate::nudge(
+                        div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(crate::animate::scramble(&label, churn)),
+                        gpui::point(row_slide(cascade), px(0.)),
+                    ))
                     .when_some(shortcut, |el, k| {
                         el.child(
                             div()
                                 .body(text::SM)
                                 .text_color(hsla(if active && danger { p.danger_fg } else { p.fg_dim }))
-                                .child(k),
+                                .child(crate::animate::scramble(&k, churn)),
                         )
                     })
                     .when(opens, |el| {
@@ -679,6 +705,15 @@ mod tests {
         assert_eq!(hover_path(&deeper, 0, 1, true), deeper, "re-entering the open row keeps its submenu state");
         assert_eq!(hover_path(&deeper, 0, 0, false), vec![Some(0)], "another row closes the submenu");
         assert_eq!(hover_path(&deeper, 1, 1, true), vec![Some(1), Some(1), None]);
+    }
+
+    #[test]
+    fn rows_slide_in_from_the_left_and_rest() {
+        use crate::animate::Progress;
+        let at = |frame| Progress { t: 0.5, frame, done: false };
+        assert_eq!(row_slide(at(0)), px(-6.));
+        assert_eq!(row_slide(at(9)), px(0.));
+        assert_eq!(row_slide(Progress::DONE), px(0.));
     }
 
     #[test]

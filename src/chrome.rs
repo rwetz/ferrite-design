@@ -369,12 +369,44 @@ pub fn resize_edge(pos: gpui::Point<Pixels>, zone: Pixels, size: Size<Pixels>, t
     })
 }
 
+/// The theme glitch (DESIGN_LANGUAGE §6.1): when the scheme or tone changes,
+/// the new palette paints at once (no flash of a half-themed window), and
+/// strips of the old one tear away over it for four beats while the window
+/// jolts. Nothing here takes input.
+fn theme_glitch(children: Vec<AnyElement>, window: &mut Window, cx: &mut App) -> AnyElement {
+    let (epoch, from) = crate::theme::last_shift(cx);
+    let g = crate::animate::play_on_change("ferrite-theme-glitch", epoch, crate::motion::BASE, window, cx);
+    let content = div().size_full().flex().flex_col().children(children);
+    let (Some(from), false) = (from, g.done) else {
+        return content.into_any_element();
+    };
+    let bands = crate::animate::glitch_bands(epoch, g);
+    let strip = |b: crate::animate::GlitchBand| {
+        let ground = hsla(from.bg);
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .top(gpui::relative(b.top))
+            .h(gpui::relative(b.height))
+            .map(|el| if b.level >= 1. { el.bg(ground) } else { el.child(dither(dither::flat(b.level)).ink(ground).size_full()) })
+            .when(b.lit, |el| el.child(div().absolute().top_0().left_0().right_0().h(px(2.)).bg(hsla(from.accent))))
+    };
+    div()
+        .size_full()
+        .relative()
+        .child(crate::animate::nudge(content, point(crate::animate::glitch_jolt(g), px(0.))))
+        .child(div().absolute().inset_0().children(bands.into_iter().map(strip)))
+        .into_any_element()
+}
+
 impl RenderOnce for WindowFrame {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
         let root = div().size_full().flex().flex_col();
+        let body = theme_glitch(self.children, window, cx);
         let Decorations::Client { tiling } = window.window_decorations() else {
-            return root.children(self.children);
+            return root.child(body);
         };
         // Opaque, square, no shadow: nothing to inset.
         window.set_client_inset(px(0.));
@@ -385,7 +417,7 @@ impl RenderOnce for WindowFrame {
             .when(!tiling.left, |el| el.border_l_1())
             .when(!tiling.right, |el| el.border_r_1())
             .border_color(line)
-            .children(self.children)
+            .child(body)
             .child(
                 gpui::canvas(
                     |_, window, _| {

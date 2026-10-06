@@ -260,6 +260,14 @@ impl RenderOnce for Calendar {
             div().w(px(32.)).flex().justify_center().body(text::XS).text_color(hsla(p.fg_faint)).child(n)
         }));
 
+        // Picking a day (click or arrow keys) lands with a flash and a ring.
+        let pick = crate::animate::play_on_change(
+            ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "pick".into()),
+            selected,
+            crate::motion::BASE,
+            window,
+            cx,
+        );
         let days = month_grid(shown, self.sunday_first);
         let mut grid = div().flex().flex_col();
         for week in days.chunks(7) {
@@ -292,10 +300,13 @@ impl RenderOnce for Calendar {
                         .border_color(hsla(if is_today && !is_sel { p.accent } else { p.bg }))
                         .when(!is_today || is_sel, |el| el.border_color(gpui::transparent_black()))
                         .when(is_sel, |el| el.bg(hsla(p.accent)))
-                        .when(ok && !is_sel, |el| el.hover(|s| s.bg(hsla(p.raised))))
+                        // The menu-row wash: it reads on any ground, including
+                        // the date picker's raised surface.
+                        .when(ok && !is_sel, |el| el.hover(|s| s.bg(hsla(p.accent_dim)).text_color(hsla(p.fg))))
                         .body(text::SM)
                         .text_color(hsla(ink))
                         .child(format!("{}", d.day))
+                        .when(is_sel, |el| el.relative().children(landing(pick, p)))
                         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
                         .when_some(handler, |el, h| el.on_click(move |_, window, cx| h(&d, window, cx))),
                 );
@@ -344,6 +355,34 @@ impl RenderOnce for Calendar {
             .child(weekdays)
             .child(grid)
     }
+}
+
+/// The picked day landing: its block floods with ink and dissolves back
+/// (a flash) while a dither ring steps out around it (a ping).
+fn landing(pick: crate::animate::Progress, p: &crate::tokens::Palette) -> Vec<gpui::AnyElement> {
+    use crate::dither::{self, dither};
+    let mut out = Vec::new();
+    if let Some(level) = crate::animate::flash_level(pick) {
+        out.push(div().absolute().inset_0().child(dither(dither::flat(level)).ink(hsla(p.accent_fg)).size_full()).into_any_element());
+    }
+    if let Some((spread, level)) = crate::animate::ping_ring(pick) {
+        let edge = || dither(dither::flat(level)).ink(hsla(p.accent)).size_full();
+        let t = px(2.);
+        out.push(
+            div()
+                .absolute()
+                .top(-spread)
+                .left(-spread)
+                .right(-spread)
+                .bottom(-spread)
+                .child(div().absolute().top_0().left_0().right_0().h(t).child(edge()))
+                .child(div().absolute().bottom_0().left_0().right_0().h(t).child(edge()))
+                .child(div().absolute().top_0().bottom_0().left_0().w(t).child(edge()))
+                .child(div().absolute().top_0().bottom_0().right_0().w(t).child(edge()))
+                .into_any_element(),
+        );
+    }
+    out
 }
 
 // ── Date picker ───────────────────────────────────────────────────────────
@@ -462,10 +501,18 @@ impl RenderOnce for DatePicker {
                 .selected(self.selected)
                 .range(self.min, self.max)
                 .on_select(move |d, window, cx| {
-                    closer.update(cx, |s, cx| s.close(window, cx));
                     if let Some(h) = &handler {
                         h(d, window, cx);
                     }
+                    // Let the pick land before the popup goes: the day
+                    // flashes in place, then the well decrypts the date.
+                    let closer = closer.clone();
+                    window
+                        .spawn(cx, async move |cx| {
+                            cx.background_executor().timer(crate::motion::BASE).await;
+                            let _ = cx.update(|window, cx| closer.update(cx, |s, cx| s.close(window, cx)));
+                        })
+                        .detach();
                 });
             let panel = div()
                 .id("date-surface")

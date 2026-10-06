@@ -4,6 +4,7 @@
 //! the text input, scrolling and layout in the submodules, and the framing
 //! (`Panel`, `StatusBar`, `rule`, …) here.
 
+pub mod boot;
 pub mod button;
 pub mod calendar;
 pub mod chart;
@@ -34,6 +35,7 @@ pub mod toggle;
 pub mod tree;
 pub mod tooltip;
 
+pub use boot::{BootScreen, boot_screen};
 pub use button::Button;
 pub use calendar::{Calendar, Date, DatePicker, calendar, date_picker};
 pub use chart::{BarChart, Heatmap, LineChart, Sparkline, bar_chart, heatmap, line_chart, sparkline};

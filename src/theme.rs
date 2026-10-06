@@ -33,6 +33,16 @@ impl Global for ActiveTone {}
 struct ActiveScheme(&'static Scheme);
 impl Global for ActiveScheme {}
 
+/// The last time the palette on screen changed at runtime: a counter and
+/// the palette it changed *from*. `chrome::window_frame` keys its glitch
+/// transition on it.
+#[derive(Clone, Copy)]
+struct LastShift {
+    epoch: u64,
+    from: &'static Palette,
+}
+impl Global for LastShift {}
+
 /// Set the preference and resolve the first tone.
 ///
 /// Call **before opening any window**, so the first frame is already the
@@ -79,8 +89,25 @@ pub fn scheme(cx: &App) -> &'static Scheme {
 /// theme::set_scheme(schemes::by_key("harbor").unwrap(), cx);
 /// ```
 pub fn set_scheme(scheme: &'static Scheme, cx: &mut App) {
+    let from = palette(cx);
     cx.set_global(ActiveScheme(scheme));
+    record_shift(from, cx);
     cx.refresh_windows();
+}
+
+/// The most recent runtime palette change, as `(epoch, from)`: the epoch
+/// counts changes (0 = none yet) and `from` is the palette that was on
+/// screen before it. For transitions; [`palette`] is always the new one.
+pub fn last_shift(cx: &App) -> (u64, Option<&'static Palette>) {
+    cx.try_global::<LastShift>().map(|s| (s.epoch, Some(s.from))).unwrap_or((0, None))
+}
+
+fn record_shift(from: &'static Palette, cx: &mut App) {
+    if std::ptr::eq(from, palette(cx)) {
+        return;
+    }
+    let epoch = last_shift(cx).0 + 1;
+    cx.set_global(LastShift { epoch, from });
 }
 
 /// Developer overrides from the environment, for trying an app in another
@@ -110,7 +137,9 @@ pub fn apply_env(cx: &mut App) {
 }
 
 fn set_tone(tone: Tone, cx: &mut App) {
+    let from = palette(cx);
     cx.set_global(ActiveTone(tone));
+    record_shift(from, cx);
     cx.refresh_windows();
 }
 

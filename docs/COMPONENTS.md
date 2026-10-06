@@ -108,7 +108,9 @@ with a scheme picker), and whole apps built from them in `examples/app_*.rs`.
 
 `decrypt`, `typewriter`, `shake`, `dissolve`, `count_up`, `unroll_in`,
 `develop`, `afterglow`, `interlace_in`, `tear`, `ping`, `power_on_in`,
-`wipe_in`, `scan`, `flash`, `cascade_in`. What each is for:
+`wipe_in`, `scan`, `flash`, `cascade_in`, and `boot_screen` (a
+text-mode POST at launch, opt-in). The theme glitch needs no call:
+`window_frame` plays it on every scheme or tone switch. What each is for:
 DESIGN_LANGUAGE §6.1. The engine underneath is `animate`.
 
 ## Behaviour every interactive component carries

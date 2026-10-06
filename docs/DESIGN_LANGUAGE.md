@@ -327,6 +327,10 @@ bold yet contained.**
 | **wipe** | unroll on its side: revealed from one edge behind a vertical amber scan line | drawers, sidebars, section switches (`wipe_in`) |
 | **scan** | one amber line passes down over content that is already there | "refreshed in place": a reloaded pane, a re-run query (`scan`) |
 | **flash** | the button's click flash for any element: floods ▓ in the accent, dissolves back | "look here" — a value that needs attention (`flash`) |
+| **glitch** | the new palette paints at once; strips of the old one tear away over it (solid → ▓ → ▒ → ░, jumping rows each beat, old-accent edges) while the window jolts 4px | every scheme or tone switch, automatically (`chrome::window_frame`) |
+| **menu cascade** | under the unroll, each row's label and shortcut decrypt a beat after the row above, sliding in 6 → 2 → 0px | every menu and submenu level |
+| **landing** | a picked day floods ▓ and dissolves back while a ring steps out around it; the date picker closes once it has landed | calendar, date picker |
+| **boot screen** | a text-mode POST after the power-on: lines print three beats apart (dot leader types on, status decrypts, memory counts up), the boot line types, the app dissolves in. ~1.4s; any key or click skips | opt-in, once per window (`boot_screen`) — consoles and retro tools |
 | **draw-on** | charts wipe in left→right once; bars grow from the baseline a frame apart | `line_chart`, `bar_chart` — live updates after that are instant |
 
 ### 6.2 Refresh rate
@@ -354,6 +358,8 @@ how *finely* an effect steps, never how long it lasts:
 - **Entrances animate; exits don't.** Closing is instant — the user has
   already moved on. One exception: a window switching off like a CRT
   (320ms), because that is the machine powering down, not content leaving.
+  The date picker also holds its popup for one `BASE` so the picked day
+  lands before it goes — the landing is the entrance of the new value.
 - **Continuous input never animates** (hover, drag, typing, scrolling),
   and neither does **live data** — a meter fed several times a second
   updates instantly (`.roll(true)` is for values that change as events).

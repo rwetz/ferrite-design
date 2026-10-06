@@ -303,6 +303,52 @@ pub fn flash_level(p: Progress) -> Option<f32> {
     (level > 0.).then_some(level)
 }
 
+/// One strip of a theme glitch, in fractions of the window's height: the
+/// old palette's ground at `level`, with the old accent along its top edge
+/// when `lit`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlitchBand {
+    pub top: f32,
+    pub height: f32,
+    pub level: f32,
+    pub lit: bool,
+}
+
+/// A theme glitch: the old palette tears away in horizontal strips that jump
+/// to new rows every beat and thin solid → ▓ → ▒ → ░, then the new one is
+/// clean. `seed` varies the strips per switch. Empty when there's nothing
+/// to draw.
+pub fn glitch_bands(seed: u64, p: Progress) -> Vec<GlitchBand> {
+    use crate::dither::level;
+    // (strips, veil, tallest strip) per 40ms beat.
+    const BEATS: [(usize, f32, f32); 4] =
+        [(7, 1., 0.14), (5, level::DARK, 0.10), (4, level::MEDIUM, 0.07), (2, level::LIGHT, 0.04)];
+    if p.done {
+        return Vec::new();
+    }
+    let Some(&(n, veil, tallest)) = BEATS.get(p.frame as usize) else {
+        return Vec::new();
+    };
+    (0..n)
+        .map(|i| {
+            let h = hash_of((seed, p.frame, i));
+            let unit = |shift: u32| ((h >> shift) & 0xFFFF) as f32 / 65535.;
+            let height = tallest * (0.3 + 0.7 * unit(0));
+            GlitchBand { top: unit(16) * (1. - height), height, level: veil, lit: p.frame < 2 && (h >> 40) & 1 == 0 }
+        })
+        .collect()
+}
+
+/// The sideways jolt the whole window takes during a theme glitch, one table
+/// step per beat. Smaller than a shake: the window, not a field, is moving.
+pub fn glitch_jolt(p: Progress) -> Pixels {
+    const STEPS: [f32; 5] = [4., -3., 2., -1., 0.];
+    if p.done {
+        return px(0.);
+    }
+    px(STEPS[(p.frame as usize).min(STEPS.len() - 1)])
+}
+
 // ── Elements ──────────────────────────────────────────────────────────────
 
 /// Reveals its child top-to-bottom like a CRT drawing a frame: the child is
@@ -744,6 +790,26 @@ mod tests {
         assert_eq!(scramble("git push", Progress::DONE), "git push");
         let mid = scramble("abcdefgh", at(0.4, 2));
         assert!(mid.starts_with("abcd")); // snap(0.4)·8 ≈ 6.2 → six locked
+    }
+
+    #[test]
+    fn glitch_thins_out_stays_on_screen_and_ends_clean() {
+        let mut last = usize::MAX;
+        for f in 0..4 {
+            let bands = glitch_bands(7, at(0.5, f));
+            assert!(!bands.is_empty() && bands.len() <= last, "beat {f} should thin");
+            last = bands.len();
+            for b in &bands {
+                assert!(b.top >= 0. && b.top + b.height <= 1.0001, "{b:?} leaves the window");
+            }
+        }
+        assert_ne!(glitch_bands(7, at(0.2, 1)), glitch_bands(8, at(0.2, 1)), "seeded");
+        assert!(glitch_bands(7, at(0.9, 4)).is_empty());
+        assert!(glitch_bands(7, Progress::DONE).is_empty());
+        assert_eq!(glitch_jolt(Progress::DONE), px(0.));
+        for f in 0..8 {
+            assert!(f32::from(glitch_jolt(at(0.5, f))).abs() <= 4.);
+        }
     }
 
     #[test]

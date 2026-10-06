@@ -33,7 +33,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
 use gpui::{
-    App, Bounds, Hsla, IntoElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas,
+    App, Bounds, ContentMask, Hsla, IntoElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, point,
+    px, size,
 };
 
 use crate::raster::{self, bgra};
@@ -364,6 +365,49 @@ impl Styled for Dither {
 /// a gigapixel texture.
 const MAX_SIDE: u32 = 8192;
 
+/// Flat fields bigger than this (device px) are painted as a repeated tile.
+const TILE: u32 = 256;
+
+/// The tile a flat, ordered field can repeat: a whole number of pattern
+/// periods, at least [`TILE`] on a side. `None` for anything that varies
+/// across the area (ramps, pictures, error diffusion).
+fn tile_side(source: &Source, pattern: Pattern, cell: u32) -> Option<u32> {
+    let Source::Field(Field::Flat(_)) = source else { return None };
+    let period = cell
+        * match pattern {
+            Pattern::Bayer4 => 4,
+            Pattern::BlueNoise => BLUE_NOISE_SIDE,
+            Pattern::Atkinson => return None,
+        };
+    Some(period * TILE.div_ceil(period))
+}
+
+/// Paint `source` as `w`×`h` device pixels at device origin `(ox, oy)`,
+/// through the raster cache. A large flat field (a modal scrim, a flash
+/// veil) is painted as one small cached tile repeated under a content mask:
+/// stepping a full-window scrim through its levels would otherwise
+/// rasterise and upload a window-sized image per level, mid-animation.
+#[allow(clippy::too_many_arguments)]
+fn paint_source(source: &Source, pattern: Pattern, cell: u32, ink: [u8; 4], paper: [u8; 4], (ox, oy): (f32, f32), (w, h): (u32, u32), window: &mut Window) {
+    let sf = window.scale_factor();
+    if let Some(t) = tile_side(source, pattern, cell).filter(|&t| w > t || h > t) {
+        let key = raster::Key::Dither { source: source.key(), pattern, w: t, h: t, cell, ink, paper };
+        let image = raster::image(key, window, || (t, t, raster_source(source, pattern, t, t, cell, ink, paper)));
+        let clip = Bounds::new(point(px(ox / sf), px(oy / sf)), size(px(w as f32 / sf), px(h as f32 / sf)));
+        window.with_content_mask(Some(ContentMask { bounds: clip }), |window| {
+            for ty in (0..h).step_by(t as usize) {
+                for tx in (0..w).step_by(t as usize) {
+                    raster::paint(image.clone(), (ox + tx as f32) / sf, (oy + ty as f32) / sf, t, t, window);
+                }
+            }
+        });
+        return;
+    }
+    let key = raster::Key::Dither { source: source.key(), pattern, w, h, cell, ink, paper };
+    let image = raster::image(key, window, || (w, h, raster_source(source, pattern, w, h, cell, ink, paper)));
+    raster::paint(image, ox / sf, oy / sf, w, h, window);
+}
+
 /// Paint `field` over `bounds` from inside another element's paint — the
 /// [`Dither`] element's own path (device-snapped, cached, one quad). Charts
 /// use it under a content mask to dither an area under a line: the pattern
@@ -377,11 +421,7 @@ pub(crate) fn paint_field(field: Field, bounds: Bounds<Pixels>, ink: Hsla, windo
     if w == 0 || h == 0 {
         return;
     }
-    let (ink, paper, cell, pattern) = (bgra(ink), [0, 0, 0, 0], 2, Pattern::Bayer4);
-    let source = Source::Field(field);
-    let key = raster::Key::Dither { source: source.key(), pattern, w, h, cell, ink, paper };
-    let image = raster::image(key, window, || (w, h, raster_source(&source, pattern, w, h, cell, ink, paper)));
-    raster::paint(image, ox / sf, oy / sf, w, h, window);
+    paint_source(&Source::Field(field), Pattern::Bayer4, 2, bgra(ink), [0, 0, 0, 0], (ox, oy), (w, h), window);
 }
 
 impl RenderOnce for Dither {
@@ -408,9 +448,7 @@ impl RenderOnce for Dither {
                 if w == 0 || h == 0 {
                     return;
                 }
-                let key = raster::Key::Dither { source: source.key(), pattern, w, h, cell, ink, paper };
-                let image = raster::image(key, window, || (w, h, raster_source(&source, pattern, w, h, cell, ink, paper)));
-                raster::paint(image, ox / sf, oy / sf, w, h, window);
+                paint_source(&source, pattern, cell, ink, paper, (ox, oy), (w, h), window);
             },
         );
         *element.style() = self.style;
@@ -428,6 +466,25 @@ mod tests {
             let n = (0..4).flat_map(|y| (0..4).map(move |x| (x, y))).filter(|&(x, y)| ink(x, y, level)).count();
             assert_eq!(n, expected, "level {level}");
         }
+    }
+
+    #[test]
+    fn flat_fields_tile_seamlessly() {
+        // A tile is a whole number of periods, so tiles repeat the full raster.
+        for (pattern, cell) in [(Pattern::Bayer4, 2), (Pattern::Bayer4, 3), (Pattern::BlueNoise, 2)] {
+            let source = Source::Field(flat(level::MEDIUM));
+            let t = tile_side(&source, pattern, cell).unwrap();
+            assert!(t >= TILE);
+            let big = raster_source(&source, pattern, t * 2, 4, cell, [9, 9, 9, 255], [0, 0, 0, 0]);
+            let tile = raster_source(&source, pattern, t, 4, cell, [9, 9, 9, 255], [0, 0, 0, 0]);
+            let row = |buf: &[u8], y: usize, w: u32| buf[y * w as usize * 4..(y + 1) * w as usize * 4].to_vec();
+            for y in 0..4 {
+                let wide = row(&big, y, t * 2);
+                assert_eq!(&wide[..t as usize * 4], row(&tile, y, t).as_slice());
+                assert_eq!(&wide[t as usize * 4..], row(&tile, y, t).as_slice());
+            }
+        }
+        assert!(tile_side(&Source::Field(Field::Vertical { from: 0., to: 1. }), Pattern::Bayer4, 2).is_none());
     }
 
     #[test]
