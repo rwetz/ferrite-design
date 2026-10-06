@@ -36,6 +36,14 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
 gpui-component = "=0.7.1"
 ```
 
+And — not optional — optimise dependencies in dev builds, or gpui is
+sluggish (PITFALLS §17):
+
+```toml
+[profile.dev.package."*"]
+opt-level = 3
+```
+
 There is no publish step: consume it from git, as `@nexis/design` is. Pin a
 `rev` once the app ships.
 
@@ -130,4 +138,5 @@ FERRITE_APPEARANCE=light cargo run --example showcase   # compare against the re
 - [ ] Paper mode is legible everywhere; the amber accent is used only for
       primary action / active / focus / progress.
 - [ ] Reduced-motion OS setting stops blinks and tickers.
+- [ ] Idle CPU is near zero with nothing animating (PITFALLS §17).
 - [ ] `cargo test` passes in `ferrite-design` at the pinned rev.

@@ -6,9 +6,9 @@
 //! widgets inside Ferrite frames today.
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, ElementId, IntoElement, ParentElement, Pixels,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
-    px,
+    AnyElement, App, ElementId, IntoElement, ParentElement, Pixels, RenderOnce,
+    SharedString, StyleRefinement, Styled, Task, Window, div, prelude::FluentBuilder as _, px,
+    relative,
 };
 
 use crate::dither::{self, dither};
@@ -167,33 +167,81 @@ impl RenderOnce for StatusBar {
 
 /// A blinking block caret — the "live" marker. Square-wave, not a fade.
 /// Solid under reduced motion.
-pub fn cursor(id: impl Into<ElementId>, window: &Window, cx: &App) -> impl IntoElement {
-    let p = palette(cx);
-    let block = div().display(Scale::X1, window).text_color(hsla(p.accent)).child("█");
-    if motion::reduced(cx) {
-        return block.into_any_element();
+///
+/// Blinks on a timer that flips state twice per [`motion::BLINK`], so the
+/// window redraws 2×/s. A repeating `with_animation` would look identical
+/// but redraws the whole window every display frame for as long as the
+/// cursor is on screen (PITFALLS §17).
+#[derive(IntoElement)]
+pub struct Cursor {
+    id: ElementId,
+}
+
+pub fn cursor(id: impl Into<ElementId>) -> Cursor {
+    Cursor { id: id.into() }
+}
+
+struct Blink {
+    on: bool,
+    _ticker: Task<()>,
+}
+
+impl RenderOnce for Cursor {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let on = if motion::reduced(cx) {
+            true
+        } else {
+            let state = window.use_keyed_state(self.id, cx, |_, cx| Blink {
+                on: true,
+                _ticker: cx.spawn(async move |this, cx| {
+                    loop {
+                        cx.background_executor().timer(motion::BLINK / 2).await;
+                        let alive = this.update(cx, |blink: &mut Blink, cx| {
+                            blink.on = !blink.on;
+                            cx.notify();
+                        });
+                        if alive.is_err() {
+                            break;
+                        }
+                    }
+                }),
+            });
+            state.read(cx).on
+        };
+        div()
+            .display(Scale::X1, window)
+            .text_color(hsla(p.accent))
+            .when(!on, |el| el.opacity(0.))
+            .child("█")
     }
-    block
-        .with_animation(
-            id,
-            Animation::new(motion::BLINK).repeat(),
-            |el, t| el.opacity(motion::blink(t)),
-        )
-        .into_any_element()
 }
 
 // ── Progress ──────────────────────────────────────────────────────────────
 
-/// A progress bar with the ▓▒░ dithered leading edge.
+/// A progress bar: a solid accent fill with a ▓▒░ dithered leading edge.
+/// The edge is a fixed-size cached dither, so a moving bar costs two quads.
 pub fn progress_bar(value: f32, height: Pixels, cx: &App) -> impl IntoElement {
     let p = palette(cx);
+    let value = value.clamp(0.0, 1.0);
     div()
+        .relative()
+        .overflow_hidden()
         .w_full()
         .h(height)
         .bg(hsla(p.sunken))
         .border_1()
         .border_color(hsla(p.line))
-        .child(dither(dither::progress(value, px(32.))).ink(hsla(p.accent)).size_full())
+        .child(div().absolute().top_0().bottom_0().left_0().w(relative(value)).bg(hsla(p.accent)))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .left(relative(value))
+                .w(px(32.))
+                .child(dither(dither::horizontal(1.0, 0.0)).ink(hsla(p.accent)).size_full()),
+        )
 }
 
 // ── Empty state ───────────────────────────────────────────────────────────

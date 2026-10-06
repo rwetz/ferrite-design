@@ -18,12 +18,19 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
 gpui-component = "=0.7.1"
 serde_json = "1"
 anyhow = "1"
+# Same major as gpui's; dither rasters are handed to gpui as image::Frame.
+image = { version = "0.25", default-features = false }
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Same major as gpui's own windows dependency; used only to opt out of
 # Windows 11's forced rounded corners (see chrome::square_corners).
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
+
+# gpui and gpui-component are unusably slow unoptimised. Optimise every
+# dependency even in dev builds; our own crate stays debuggable.
+[profile.dev.package."*"]
+opt-level = 3
 
 [[example]]
 name = "showcase"

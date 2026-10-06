@@ -37,7 +37,7 @@ gradients, stepped motion. The side-by-side is in
 | `tokens` | The Iron (dark) and Paper (light) palettes, type scale, spacing grid. Contrast is enforced by tests. |
 | `theme` | Projects the palettes onto gpui-component's theme; appearance switching and follow-system. |
 | `fonts` | Embedded PxPlus IBM VGA 8×16 (display) + JetBrains Mono (body), and device-pixel snapping for the pixel face. |
-| `dither` | 4×4 Bayer ordered dither as an element: flat, ramp, radial, progress, or any field. Device-pixel cells. |
+| `dither` | 4×4 Bayer ordered dither as an element: flat, ramp, radial. Device-pixel cells, rasterised once and cached. |
 | `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
 | `motion` | Stepped motion vocabulary, blink, reduced-motion check. |
 | `chrome` | Window options, square corners on Windows 11, and Ferrite's own `TitleBar`. |
@@ -51,6 +51,9 @@ ferrite-design = { git = "https://github.com/rwetz/ferrite-design" }
 gpui = { package = "gpui-pre", version = "=0.3.8" }            # must match exactly
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
 gpui-component = "=0.7.1"
+
+[profile.dev.package."*"]
+opt-level = 3      # gpui is sluggish unoptimised — see PITFALLS §17
 ```
 
 ```rust

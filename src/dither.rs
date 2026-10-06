@@ -13,14 +13,22 @@
 //!
 //! **Device pixels.** Cells are sized in *physical* pixels and the grid is
 //! snapped to the device, so a 1-px dither stays a 1-px dither at 125% and
-//! 150% instead of smearing into grey mush. This is the dither's equivalent
-//! of the display font's pixel-snapping.
+//! 150% instead of smearing into grey mush.
+//!
+//! **Cost.** A dither is rasterised once into an image at device resolution
+//! and cached by (field, size, scale, colors); every later frame paints that
+//! image as a single textured quad. Painting cells as individual quads looks
+//! the same but costs tens of thousands of quads per element per frame —
+//! enough to peg a core (see PITFALLS §17). Fields are therefore plain data
+//! ([`Field`]), not closures, so they can be cache keys.
 
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use gpui::{
-    App, Bounds, Hsla, IntoElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas,
-    fill, point, px, size,
+    App, Bounds, Corners, Hsla, IntoElement, Pixels, RenderImage, RenderOnce, StyleRefinement,
+    Styled, Window, canvas, point, px, size,
 };
 
 /// The 4×4 Bayer matrix. Thresholds are `(m + 0.5) / 16`.
@@ -44,52 +52,142 @@ pub mod level {
     pub const DARK: f32 = 0.75; // ▓
 }
 
-/// A level for every point: `(x, y, width, height)` in logical px → `0..=1`.
-pub type Field = Rc<dyn Fn(f32, f32, f32, f32) -> f32>;
-
-/// Uniform level.
-pub fn flat(level: f32) -> Field {
-    Rc::new(move |_, _, _, _| level)
+/// What level each point of an element gets. Coordinates are normalised:
+/// `u` runs 0→1 left to right, `v` 0→1 top to bottom.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Field {
+    /// Uniform level.
+    Flat(f32),
+    /// Linear ramp left → right.
+    Horizontal { from: f32, to: f32 },
+    /// Linear ramp top → bottom.
+    Vertical { from: f32, to: f32 },
+    /// Falloff from the centre (`center`) to the corners (`edge`).
+    Radial { center: f32, edge: f32 },
 }
 
-/// Linear ramp left → right.
-pub fn horizontal(from: f32, to: f32) -> Field {
-    Rc::new(move |x, _, w, _| from + (to - from) * (x / w.max(1.0)))
-}
-
-/// Linear ramp top → bottom.
-pub fn vertical(from: f32, to: f32) -> Field {
-    Rc::new(move |_, y, _, h| from + (to - from) * (y / h.max(1.0)))
-}
-
-/// Radial falloff from the centre (`center` level) to the corners (`edge`).
-pub fn radial(center: f32, edge: f32) -> Field {
-    Rc::new(move |x, y, w, h| {
-        let (dx, dy) = (x / w.max(1.0) - 0.5, y / h.max(1.0) - 0.5);
-        let d = ((dx * dx + dy * dy).sqrt() / std::f32::consts::FRAC_1_SQRT_2).min(1.0);
-        center + (edge - center) * d
-    })
-}
-
-/// A progress fill: solid up to `value`, then a dithered falloff `ramp` px
-/// wide — the ▓▒░ leading edge.
-pub fn progress(value: f32, ramp: Pixels) -> Field {
-    let ramp = f32::from(ramp);
-    Rc::new(move |x, _, w, _| {
-        let edge = value.clamp(0.0, 1.0) * w;
-        if x <= edge - ramp {
-            1.0
-        } else if x >= edge {
-            0.0
-        } else {
-            (edge - x) / ramp
+impl Field {
+    pub fn level(&self, u: f32, v: f32) -> f32 {
+        match *self {
+            Field::Flat(l) => l,
+            Field::Horizontal { from, to } => from + (to - from) * u,
+            Field::Vertical { from, to } => from + (to - from) * v,
+            Field::Radial { center, edge } => {
+                let (dx, dy) = (u - 0.5, v - 0.5);
+                let d = ((dx * dx + dy * dy).sqrt() / std::f32::consts::FRAC_1_SQRT_2).min(1.0);
+                center + (edge - center) * d
+            }
         }
-    })
+    }
+
+    fn key(&self) -> [u32; 3] {
+        match *self {
+            Field::Flat(l) => [0, l.to_bits(), 0],
+            Field::Horizontal { from, to } => [1, from.to_bits(), to.to_bits()],
+            Field::Vertical { from, to } => [2, from.to_bits(), to.to_bits()],
+            Field::Radial { center, edge } => [3, center.to_bits(), edge.to_bits()],
+        }
+    }
 }
 
-/// Hard cap on painted quads per element, so a careless full-window dither at
-/// 1px cells can't stall a frame. Past it, cells grow until it fits.
-const MAX_CELLS: f32 = 160_000.0;
+pub fn flat(level: f32) -> Field {
+    Field::Flat(level)
+}
+
+pub fn horizontal(from: f32, to: f32) -> Field {
+    Field::Horizontal { from, to }
+}
+
+pub fn vertical(from: f32, to: f32) -> Field {
+    Field::Vertical { from, to }
+}
+
+pub fn radial(center: f32, edge: f32) -> Field {
+    Field::Radial { center, edge }
+}
+
+/// Rasterise `field` into a BGRA buffer `w`×`h` device pixels, with square
+/// cells `cell` device pixels on a side. Pure, so it is testable.
+pub fn raster(field: Field, w: u32, h: u32, cell: u32, ink_bgra: [u8; 4], paper_bgra: [u8; 4]) -> Vec<u8> {
+    let cell = cell.max(1);
+    let (cols, rows) = (w.div_ceil(cell), h.div_ceil(cell));
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    let mut row_mask = vec![false; cols as usize];
+    for row in 0..rows {
+        let v = ((row as f32 + 0.5) * cell as f32) / h.max(1) as f32;
+        for col in 0..cols {
+            let u = ((col as f32 + 0.5) * cell as f32) / w.max(1) as f32;
+            row_mask[col as usize] = ink(col, row, field.level(u, v));
+        }
+        let y0 = row * cell;
+        for y in y0..(y0 + cell).min(h) {
+            let line = &mut out[(y * w * 4) as usize..((y + 1) * w * 4) as usize];
+            for (x, px) in line.chunks_exact_mut(4).enumerate() {
+                px.copy_from_slice(if row_mask[x / cell as usize] { &ink_bgra } else { &paper_bgra });
+            }
+        }
+    }
+    out
+}
+
+// ── The image cache ──────────────────────────────────────────────────────
+
+/// Past this many cached images the least recently used is evicted and its
+/// texture freed. Window resizes generate a new size per frame, so this has
+/// to be bounded.
+const CACHE_CAP: usize = 96;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct Key {
+    field: [u32; 3],
+    w: u32,
+    h: u32,
+    cell: u32,
+    ink: [u8; 4],
+    paper: [u8; 4],
+}
+
+#[derive(Default)]
+struct Cache {
+    images: HashMap<Key, (Arc<RenderImage>, u64)>,
+    clock: u64,
+}
+
+thread_local! {
+    static CACHE: RefCell<Cache> = RefCell::default();
+}
+
+fn cached_image(key: Key, field: Field, window: &mut Window) -> Arc<RenderImage> {
+    let (image, evicted) = CACHE.with_borrow_mut(|cache| {
+        cache.clock += 1;
+        let now = cache.clock;
+        if let Some((image, used)) = cache.images.get_mut(&key) {
+            *used = now;
+            return (image.clone(), None);
+        }
+        let bytes = raster(field, key.w, key.h, key.cell, key.ink, key.paper);
+        let buffer = image::RgbaImage::from_raw(key.w, key.h, bytes).expect("raster size");
+        let image = Arc::new(RenderImage::new([image::Frame::new(buffer)]));
+        cache.images.insert(key, (image.clone(), now));
+        let evicted = (cache.images.len() > CACHE_CAP).then(|| {
+            let oldest = *cache.images.iter().min_by_key(|(_, (_, used))| *used).unwrap().0;
+            cache.images.remove(&oldest).unwrap().0
+        });
+        (image, evicted)
+    });
+    if let Some(old) = evicted {
+        let _ = window.drop_image(old);
+    }
+    image
+}
+
+fn bgra(color: Hsla) -> [u8; 4] {
+    let c = color.to_rgb();
+    let b = |f: f32| (f.clamp(0.0, 1.0) * 255.0).round() as u8;
+    [b(c.b), b(c.g), b(c.r), b(c.a)]
+}
+
+// ── The element ──────────────────────────────────────────────────────────
 
 /// A dithered fill. Size it like any element (`.size_full()`, `.h(px(16.))`).
 #[derive(IntoElement)]
@@ -132,68 +230,40 @@ impl Styled for Dither {
     }
 }
 
+/// Larger than any sane element; guards against a runaway layout asking for
+/// a gigapixel texture.
+const MAX_SIDE: u32 = 8192;
+
 impl RenderOnce for Dither {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let ink_color = self.ink.unwrap_or_else(|| crate::tokens::hsla(crate::theme::palette(cx).line_strong));
-        let paper = self.paper;
+        let ink_color = self
+            .ink
+            .unwrap_or_else(|| crate::tokens::hsla(crate::theme::palette(cx).line_strong));
+        let ink = bgra(ink_color);
+        let paper = self.paper.map(bgra).unwrap_or([0, 0, 0, 0]);
         let field = self.field;
-        let cell_device = self.cell;
+        let cell = self.cell;
 
         let mut element = canvas(
             |_, _, _| {},
             move |bounds: Bounds<Pixels>, _, window: &mut Window, _cx| {
                 let sf = window.scale_factor();
-                let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
-                if w <= 0.0 || h <= 0.0 {
+                // Snap to the device grid so image pixels map 1:1 onto
+                // screen pixels (no resampling blur).
+                let ox = (f32::from(bounds.origin.x) * sf).round();
+                let oy = (f32::from(bounds.origin.y) * sf).round();
+                let w = ((f32::from(bounds.size.width) * sf).round() as u32).min(MAX_SIDE);
+                let h = ((f32::from(bounds.size.height) * sf).round() as u32).min(MAX_SIDE);
+                if w == 0 || h == 0 {
                     return;
                 }
-                if let Some(paper) = paper {
-                    window.paint_quad(fill(bounds, paper));
-                }
-
-                // Cell size in logical px, grown if the element is huge.
-                let mut cell = cell_device as f32 / sf;
-                let cells = (w / cell) * (h / cell);
-                if cells > MAX_CELLS {
-                    cell *= (cells / MAX_CELLS).sqrt().ceil();
-                }
-
-                // Snap the grid origin to a device pixel so cells align.
-                let ox = (f32::from(bounds.origin.x) * sf).round() / sf;
-                let oy = (f32::from(bounds.origin.y) * sf).round() / sf;
-                let cols = (w / cell).ceil() as u32;
-                let rows = (h / cell).ceil() as u32;
-                let right = ox + w;
-                let bottom = oy + h;
-
-                window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
-                    for row in 0..rows {
-                        let y = oy + row as f32 * cell;
-                        let cy = (row as f32 + 0.5) * cell;
-                        let row_h = cell.min(bottom - y);
-                        // Merge horizontal runs of inked cells into one quad.
-                        let mut run_start: Option<u32> = None;
-                        for col in 0..=cols {
-                            let on = col < cols && {
-                                let cx_ = (col as f32 + 0.5) * cell;
-                                ink(col, row, field(cx_, cy, w, h))
-                            };
-                            match (on, run_start) {
-                                (true, None) => run_start = Some(col),
-                                (false, Some(start)) => {
-                                    let x0 = ox + start as f32 * cell;
-                                    let x1 = (ox + col as f32 * cell).min(right);
-                                    window.paint_quad(fill(
-                                        Bounds::new(point(px(x0), px(y)), size(px(x1 - x0), px(row_h))),
-                                        ink_color,
-                                    ));
-                                    run_start = None;
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                });
+                let key = Key { field: field.key(), w, h, cell, ink, paper };
+                let image = cached_image(key, field, window);
+                let target = Bounds::new(
+                    point(px(ox / sf), px(oy / sf)),
+                    size(px(w as f32 / sf), px(h as f32 / sf)),
+                );
+                let _ = window.paint_image(target, target, Corners::default(), image, 0, false);
             },
         );
         *element.style() = self.style;
@@ -214,10 +284,28 @@ mod tests {
     }
 
     #[test]
-    fn progress_field_is_solid_then_falls_off() {
-        let f = progress(0.5, px(10.));
-        assert_eq!(f(10.0, 0.0, 100.0, 4.0), 1.0);
-        assert!(f(45.0, 0.0, 100.0, 4.0) > 0.0 && f(45.0, 0.0, 100.0, 4.0) < 1.0);
-        assert_eq!(f(60.0, 0.0, 100.0, 4.0), 0.0);
+    fn raster_matches_the_cell_rule() {
+        let (ink_px, paper_px) = ([1, 2, 3, 255], [0, 0, 0, 0]);
+        // 8×8 device px, 2px cells → a 4×4 cell grid at 50%: half inked.
+        let buf = raster(flat(level::MEDIUM), 8, 8, 2, ink_px, paper_px);
+        let inked = buf.chunks_exact(4).filter(|p| *p == ink_px).count();
+        assert_eq!(inked, 32);
+        // Every 2×2 block is uniform.
+        for cy in 0..4 {
+            for cx in 0..4 {
+                let at = |x: u32, y: u32| &buf[((y * 8 + x) * 4) as usize..][..4];
+                let first = at(cx * 2, cy * 2);
+                for (dx, dy) in [(1, 0), (0, 1), (1, 1)] {
+                    assert_eq!(at(cx * 2 + dx, cy * 2 + dy), first);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn raster_handles_partial_edge_cells() {
+        // Sizes that aren't a multiple of the cell must not panic or overrun.
+        let buf = raster(horizontal(0.0, 1.0), 7, 5, 3, [9; 4], [0; 4]);
+        assert_eq!(buf.len(), 7 * 5 * 4);
     }
 }

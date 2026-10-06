@@ -133,3 +133,34 @@ When driving the app from a script (PowerShell, AutoHotkey…) for screenshots,
 the script process must be DPI-aware (`SetProcessDPIAware`) or cursor
 coordinates are scaled and synthetic wheel events land outside the window —
 which looks exactly like "scrolling is broken" when it isn't.
+
+## 17. Per-frame work pegs a core — ✅ handled
+
+The first showcase idled at **~99% of a CPU core** (debug build). Three causes,
+each now fixed; measured after the fix: **3.8%**, with the showcase's own
+12.5 Hz progress ticker still running.
+
+1. **`with_animation(..).repeat()` redraws the whole window every display
+   frame**, forever, for as long as the element is on screen. A blinking
+   cursor built that way made every other element re-render at 60+ fps.
+   For anything periodic and discrete (blinks, spinners, tickers) use a
+   timer that flips state and calls `cx.notify()` at the rate the *content*
+   changes — `components::Cursor` redraws 2×/s.
+2. **Dither drawn as per-cell quads** is tens of thousands of quads per
+   element per frame. `Dither` now rasterises once into an image at device
+   resolution, caches it by (field, size, scale, colors), and paints one
+   textured quad. The cache is bounded and frees evicted textures from the
+   GPU atlas (`window.drop_image`), so resizing can't leak. This is why
+   `dither::Field` is plain data, not a closure: it has to be a cache key.
+3. **Unoptimised dependencies.** gpui and gpui-component are dramatically
+   slower at `opt-level = 0`. Every Ferrite app's `Cargo.toml` needs:
+
+   ```toml
+   [profile.dev.package."*"]
+   opt-level = 3
+   ```
+
+   Your own crate stays at 0, so debugging is unaffected.
+
+General rule: nothing in a Ferrite view should cost O(pixels) per frame.
+Measure idle CPU (`Get-Process`/`top`) whenever adding anything animated.

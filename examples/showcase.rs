@@ -117,7 +117,7 @@ impl Render for Showcase {
                                         .items_end()
                                         .gap_3()
                                         .child(div().display(Scale::X3, window).text_color(hsla(p.accent_text)).child("FERRITE"))
-                                        .child(cursor("hero-cursor", window, cx)),
+                                        .child(cursor("hero-cursor")),
                                 )
                                 .child(div().display(Scale::X2, window).child("DISPLAY X2 — 32PX CELL"))
                                 .child(div().display(Scale::X1, window).child("DISPLAY X1 ─ ░▒▓█ ┌─┐ │ └─┘ ═║ ←↑→↓"))

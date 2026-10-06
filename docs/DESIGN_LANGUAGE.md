@@ -159,8 +159,8 @@ would reach for those, Ferrite uses **4×4 ordered (Bayer) dither** or a
 
 ### 5.1 Dither (`src/dither.rs`)
 
-- Fields: `flat`, `horizontal`, `vertical`, `radial`, `progress`, or any
-  `Fn(x, y, w, h) -> level`.
+- Fields: `flat`, `horizontal`, `vertical`, `radial` (plain data, so each
+  dither is rasterised once and cached; repaints are one textured quad).
 - Levels: use `dither::level::{LIGHT 0.25, MEDIUM 0.5, DARK 0.75}` (they map
   to `░ ▒ ▓`) so textures match across apps.
 - Cells are sized in **device pixels** and snapped to the device grid, so a
@@ -198,6 +198,11 @@ Nexis glides; Ferrite **steps**. Machines don't ease.
 | `motion::BASE` | 200ms | default stepped transition |
 | `motion::SLOW` | 320ms | large reveals |
 | `motion::BLINK` | 1060ms | caret / live-marker cycle, square wave |
+
+**Periodic motion runs on timers, not animations.** Blinks, spinners and
+tickers flip state with `cx.notify()` at the rate their content changes; a
+repeating `with_animation` redraws the entire window every display frame
+(PITFALLS §17).
 
 ```rust
 el.with_animation("reveal", Animation::new(motion::BASE).with_easing(motion::steps(5)), |el, t| el.opacity(t))
