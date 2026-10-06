@@ -35,13 +35,15 @@ pub(crate) struct OverlayState {
     previous: Option<FocusHandle>,
     /// Highlighted entry (menus).
     pub(crate) highlight: Option<usize>,
+    /// Highlights of open submenus, one per level below the root (menus).
+    pub(crate) sub: Vec<Option<usize>>,
     /// Window position to open at (context menus); `None` = under the trigger.
     pub(crate) at: Option<Point<Pixels>>,
 }
 
 impl OverlayState {
     pub(crate) fn new(cx: &mut Context<Self>) -> Self {
-        Self { open: false, focus: cx.focus_handle(), previous: None, highlight: None, at: None }
+        Self { open: false, focus: cx.focus_handle(), previous: None, highlight: None, sub: Vec::new(), at: None }
     }
 
     pub(crate) fn show(&mut self, at: Option<Point<Pixels>>, highlight: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
@@ -51,6 +53,7 @@ impl OverlayState {
         self.open = true;
         self.at = at;
         self.highlight = highlight;
+        self.sub.clear();
         self.focus.focus(window, cx);
         cx.notify();
     }
@@ -61,6 +64,7 @@ impl OverlayState {
         }
         self.open = false;
         self.highlight = None;
+        self.sub.clear();
         if let Some(previous) = self.previous.take()
             && self.focus.contains_focused(window, cx)
         {

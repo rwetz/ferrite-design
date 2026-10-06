@@ -295,3 +295,28 @@ when something visible changed (a countdown segment, an entry frame, a
 removal). An always-on timer or a notify on every tick would put idle
 redraws back (§17).
 
+## 30. Shortcuts need *something* focused inside your view — ✅ handled by the palette
+
+gpui dispatches a keystroke from the focused element up its ancestors.
+With **nothing** focused it goes only to the window's root view — for a
+gpui-component app that's `Root`, not your view — so an `.on_action` on your
+own root div never runs. Ctrl+Shift+P did nothing at launch, and again
+after the palette closed with no previous focus to give back.
+
+`CommandPalette` now keeps a permanent focus point inside your tree: it
+takes focus at creation if nothing else has it, and closing returns there
+when there's nowhere better. If you handle app-wide actions without a
+palette, give your root view a `FocusHandle`, `.track_focus` it, and focus
+it when the window opens.
+
+## 31. Cascading menus: one layer, not one per level
+
+Rendering each submenu as its own `deferred(anchored(..))` breaks two
+things: each level snaps to the window on its own (a submenu jumps away
+from its parent), and the root's `on_mouse_down_out` sees a click on a
+submenu as *outside* and closes everything before the item's `on_click`
+fires. Lay every open level side by side in one flex row inside the root's
+anchored layer, push each level down so its first row lines up with its
+parent row (fixed row heights make this exact), and put
+`on_mouse_down_out` on that row.
+

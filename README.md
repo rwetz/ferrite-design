@@ -20,7 +20,8 @@ window chrome, and the rules that hold them together.
 |---|---|
 | ![Components — Iron](docs/img/components-iron.png) | ![Components — Paper](docs/img/components-paper.png) |
 
-![Menus, popover and pixel icons](docs/img/components-overlays.png)
+| ![Menus, popover and pixel icons](docs/img/components-overlays.png) | ![Cascading submenus](docs/img/components-submenus.png) |
+| --- | --- |
 
 | ![Command palette — fuzzy filter over a screen-doored app](docs/img/components-palette.png) | ![Toasts — stepped countdown, one per kind](docs/img/components-toasts.png) |
 | --- | --- |
@@ -52,7 +53,7 @@ gradients, stepped motion. The side-by-side is in
 | `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
 | `motion` | Stepped motion vocabulary, blink, reduced-motion check. |
 | `chrome` | Window options, square corners on Windows 11, and Ferrite's own `TitleBar`. |
-| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `CommandPalette`, `Toaster` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
+| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `submenu`, `CommandPalette`, `Toaster` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
 | `icon` | 21 pixel icons drawn on the display font's grid; they never fall back to a system font. |
 | `fuzzy` | The palette's matcher: exact best-alignment scoring (word starts, runs, gaps) with match positions. |
 

@@ -13,7 +13,7 @@ use ferrite_design::{
     Appearance, FerriteText, Icon, Scale,
     chrome::{self, title_bar},
     components::{
-        Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, kbd, list_item, menu_item,
+        Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
     },
     icon::icon,
@@ -398,8 +398,29 @@ impl Render for Components {
             .trigger(Button::new("file-btn").label("File").icon(Icon::ChevronDown))
             .item(menu_item("New").icon(Icon::Plus).shortcut("Ctrl+N").on_select(act("NEW")))
             .item(menu_item("Open folder").icon(Icon::Folder).shortcut("Ctrl+O").on_select(act("OPEN")))
+            .submenu(
+                submenu("Open recent")
+                    .icon(Icon::File)
+                    .item(menu_item("ferrite-design/").icon(Icon::Folder).on_select(act("OPEN FERRITE")))
+                    .item(menu_item("nexis-design/").icon(Icon::Folder).on_select(act("OPEN NEXIS")))
+                    .item(menu_item("logscope/").icon(Icon::Folder).on_select(act("OPEN LOGSCOPE")))
+                    .separator()
+                    .item(menu_item("Clear recent").on_select(act("CLEARED RECENT"))),
+            )
             .item(menu_item("Duplicate").icon(Icon::Copy).shortcut("Ctrl+D").on_select(act("DUPLICATE")))
-            .item(menu_item("Export").icon(Icon::Up).disabled(true))
+            .submenu(
+                submenu("Export")
+                    .icon(Icon::Up)
+                    .label("Image")
+                    .item(menu_item("PNG").on_select(act("EXPORT PNG")))
+                    .submenu(
+                        submenu("Dithered")
+                            .item(menu_item("1-bit · Bayer 4x4").on_select(act("EXPORT 1-BIT")))
+                            .item(menu_item("2-bit · Bayer 4x4").on_select(act("EXPORT 2-BIT"))),
+                    )
+                    .separator()
+                    .item(menu_item("PDF").disabled(true)),
+            )
             .separator()
             .label("View")
             .item(menu_item("Word wrap").checked(self.word_wrap).shortcut("Alt+Z").on_select(toggle(|v| &mut v.word_wrap, "WRAP")))
@@ -444,6 +465,13 @@ impl Render for Components {
             .item(menu_item("Copy path").icon(Icon::Copy).shortcut("Ctrl+Shift+C").on_select(act("COPY PATH")))
             .item(menu_item("Reveal in folder").icon(Icon::Folder).on_select(act("REVEAL")))
             .item(menu_item("Search here").icon(Icon::Search).on_select(act("SEARCH HERE")))
+            .submenu(
+                submenu("Open with")
+                    .icon(Icon::ChevronRight)
+                    .item(menu_item("Editor").on_select(act("OPEN IN EDITOR")))
+                    .item(menu_item("Terminal").on_select(act("OPEN IN TERMINAL")))
+                    .item(menu_item("Hex view").on_select(act("OPEN HEX"))),
+            )
             .separator()
             .item(menu_item("Move to trash").icon(Icon::Trash).danger().on_select(act("TRASH")))
             .child(

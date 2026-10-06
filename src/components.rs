@@ -19,7 +19,7 @@ pub mod tooltip;
 
 pub use button::Button;
 pub use list::{ListItem, list_item};
-pub use menu::{Menu, MenuItem, context_menu, dropdown_menu, menu_item};
+pub use menu::{Menu, MenuItem, Submenu, context_menu, dropdown_menu, menu_item, submenu};
 pub use overlay::{Align, Popover, popover};
 pub use palette::{CommandPalette, PaletteCommand, TogglePalette, command};
 pub use tabs::{Tabs, tabs};

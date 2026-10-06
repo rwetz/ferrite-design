@@ -155,6 +155,10 @@ cx.bind_keys([KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
 Also give it a clickable entry point (a title-bar or toolbar button). The
 components example has the full version.
 
+Create the palette in the root view's constructor, as above: it parks
+keyboard focus inside your view at startup so Ctrl+Shift+P works before
+anything has been clicked (PITFALLS §30).
+
 ## Step 5c — Toasts
 
 One `Toaster` per window, hosted next to the palette:

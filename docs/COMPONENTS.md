@@ -32,7 +32,7 @@ See every one of them live: `cargo run --example components`.
 | **`list_item`** | `components::list` | selectable row: amber bar + `accent_dim` wash, glyph, meta |
 | **`tooltip` / `kbd`** | `components::tooltip` | square tooltip with optional keycaps |
 | **`popover`** | `components::overlay` | non-modal panel under a trigger, `[ TITLE ]` header, hard dithered drop shadow |
-| **`dropdown_menu` / `context_menu`** | `components::menu` | icons, shortcuts, check toggles, section labels, separators, danger + disabled rows; full keyboard nav |
+| **`dropdown_menu` / `context_menu`** | `components::menu` | icons, shortcuts, check toggles, section labels, separators, danger + disabled rows, nested `submenu`s (open on hover, → / ← / Esc per level, cascade snaps on screen as one); full keyboard nav |
 | **`CommandPalette`** | `components::palette` | modal, fuzzy-ranked (`fuzzy`), grouped when empty, amber match highlights, screen-door scrim; wraps gpui-component's `Input` for the text field |
 | **`Toaster` / `toast`** | `components::toast` | bottom-right stack of up to 4; info/success/warning/danger with pixel icon + `INFO OK WARN ERR` code; stepped 16-segment countdown, paused on hover; dither materialise on entry; optional action; sticky |
 | **`Icon`** | `icon` | 21 pixel icons on the type grid; `fit()` for fixed-height controls |
@@ -58,13 +58,13 @@ aren't told they're disabled.
 | 2 | `Button` | ✅ native |
 | 3 | `Switch` / `Checkbox` / `Radio` | ✅ native |
 | 4 | `Tag` / `Badge` | ✅ native (+ `meter`) |
-| 5 | `Tooltip` / `Popover` / menus | ✅ native — tooltip, popover, dropdown + context menu (no submenus yet) |
+| 5 | `Tooltip` / `Popover` / menus | ✅ native — tooltip, popover, dropdown + context menu with submenus |
 | 6 | `Tab` / `TabBar` | ✅ native (+ `list_item`) |
 | 7 | `Input` | **last, if ever** — IME, selection, undo |
 | — | `List`, `Table`, `VirtualList`, `Dock`, `Resizable` | keep wrapping; put `list_item` rows inside the library's virtual list |
 
-Next up: **`window_border`** once there's a Linux machine to verify it on,
-and **submenus**.
+The overlay set is complete. Next up: **`window_border`** once there's a
+Linux machine to verify it on.
 
 Inputs, virtualised lists and docking are where a component library earns its
 keep. Replacing them is not a goal in itself.

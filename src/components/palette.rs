@@ -178,6 +178,9 @@ pub struct CommandPalette {
     highlight: Option<usize>,
     open: bool,
     previous_focus: Option<FocusHandle>,
+    /// A focus point that always exists inside the app's tree (the
+    /// palette's own idle element). See [`CommandPalette::new`].
+    home: FocusHandle,
     scroll: ScrollHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -193,6 +196,15 @@ impl CommandPalette {
             InputEvent::PressEnter { .. } => this.confirm(&Confirm, window, cx),
             _ => {}
         })];
+        // With nothing focused, gpui sends keystrokes only to the window's
+        // root view — not to the app's own root, where `TogglePalette` is
+        // handled — so Ctrl+Shift+P would do nothing. Park focus on an
+        // element inside the app until something else takes it, and come
+        // back here when the palette closes with nowhere else to go.
+        let home = cx.focus_handle();
+        if window.focused(cx).is_none() {
+            home.focus(window, cx);
+        }
         Self {
             input,
             commands: Vec::new(),
@@ -200,6 +212,7 @@ impl CommandPalette {
             highlight: None,
             open: false,
             previous_focus: None,
+            home,
             scroll: ScrollHandle::new(),
             _subscriptions: subscriptions,
         }
@@ -233,9 +246,8 @@ impl CommandPalette {
             return;
         }
         self.open = false;
-        if let Some(previous) = self.previous_focus.take() {
-            previous.focus(window, cx);
-        }
+        let back = self.previous_focus.take().unwrap_or_else(|| self.home.clone());
+        back.focus(window, cx);
         cx.notify();
     }
 
@@ -312,8 +324,10 @@ fn highlight_ranges(label: &str, positions: &[usize], style: HighlightStyle) -> 
 
 impl Render for CommandPalette {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Always rendered, open or not: it's the home focus point.
+        let home = div().id("palette-home").track_focus(&self.home);
         if !self.open {
-            return div().into_any_element();
+            return home.into_any_element();
         }
         let p = palette(cx);
         let viewport = window.viewport_size();
@@ -438,7 +452,7 @@ impl Render for CommandPalette {
 
         // Full-window layer: a screen-door scrim (the app ~69% dithered into
         // the page color), then the panel near the top.
-        deferred(
+        home.child(deferred(
             anchored().position(point(px(0.), px(0.))).child(
                 div()
                     .id("palette-layer")
@@ -470,7 +484,7 @@ impl Render for CommandPalette {
                     ),
             ),
         )
-        .with_priority(2)
+        .with_priority(2))
         .into_any_element()
     }
 }
