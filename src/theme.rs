@@ -1,13 +1,16 @@
 //! Appearance: which palette is on screen, and keeping it in step with the
 //! user's preference and the OS.
 //!
-//! Ferrite owns this outright. The active [`Tone`] is a gpui global;
-//! [`palette`] reads it, every component paints from that, and switching
-//! tone refreshes every window. There is no second theme system to keep in
+//! Two choices make the palette: the **scheme** ([`set_scheme`]: Ferrite by
+//! default, or any of [`crate::schemes::SCHEMES`]) and the **tone** (dark or
+//! light, from the [`Appearance`] preference). Both are gpui globals;
+//! [`palette`] reads them, every component paints from that, and changing
+//! either refreshes every window. There is no second theme system to keep in
 //! sync and nothing that can fall back to someone else's default colors.
 
 use gpui::{App, Global, Subscription, Window, WindowAppearance};
 
+use crate::schemes::{FERRITE, Scheme};
 use crate::tokens::{Palette, Tone};
 
 /// The user's appearance preference. Ferrite is dark-first: the default is
@@ -26,6 +29,9 @@ impl Global for AppearancePref {}
 
 struct ActiveTone(Tone);
 impl Global for ActiveTone {}
+
+struct ActiveScheme(&'static Scheme);
+impl Global for ActiveScheme {}
 
 /// Set the preference and resolve the first tone.
 ///
@@ -53,10 +59,28 @@ pub fn tone(cx: &App) -> Tone {
     cx.try_global::<ActiveTone>().map(|t| t.0).unwrap_or(Tone::Dark)
 }
 
-/// The palette currently on screen. Use this, not `IRON`/`PAPER` directly,
-/// anywhere you paint a token yourself.
+/// The palette currently on screen: the active scheme in the active tone.
+/// Use this, never a palette constant, anywhere you paint a token yourself.
 pub fn palette(cx: &App) -> &'static Palette {
-    Palette::for_tone(tone(cx))
+    scheme(cx).palette(tone(cx))
+}
+
+/// The scheme on screen (Ferrite unless the app chose another).
+pub fn scheme(cx: &App) -> &'static Scheme {
+    cx.try_global::<ActiveScheme>().map(|s| s.0).unwrap_or(&FERRITE)
+}
+
+/// Switch color scheme. Call it before opening the first window (after
+/// [`crate::init`]) to start in a scheme with no flash, or at any time from
+/// a settings screen; every window repaints.
+///
+/// ```ignore
+/// ferrite_design::init(Appearance::Dark, cx);
+/// theme::set_scheme(schemes::by_key("harbor").unwrap(), cx);
+/// ```
+pub fn set_scheme(scheme: &'static Scheme, cx: &mut App) {
+    cx.set_global(ActiveScheme(scheme));
+    cx.refresh_windows();
 }
 
 fn set_tone(tone: Tone, cx: &mut App) {

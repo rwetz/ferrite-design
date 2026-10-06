@@ -37,11 +37,13 @@ pub mod icon;
 pub mod motion;
 pub mod prelude;
 mod raster;
+pub mod schemes;
 pub mod theme;
 pub mod tokens;
 
 pub use fonts::{FerriteText, Scale};
 pub use icon::{Icon, icon};
+pub use schemes::{SCHEMES, Scheme};
 pub use theme::{Appearance, palette};
 pub use tokens::{IRON, PAPER, Palette};
 
