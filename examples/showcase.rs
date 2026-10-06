@@ -34,8 +34,8 @@ struct Showcase {
 impl Showcase {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // Redraw the progress demo and spinner every second live frame
-        // (`motion::frame`, which the refresh picker changes): 80ms at the
-        // default 25fps, ~8ms at 240. Under reduced motion nothing ticks;
+        // (`motion::frame`, which the refresh picker changes): ~8ms at the
+        // default 240fps, 80ms at 25. Under reduced motion nothing ticks;
         // the screen renders its final state.
         if !motion::reduced(cx) {
             cx.spawn(async move |this, cx| {
@@ -323,7 +323,7 @@ fn main() {
             _ => Appearance::Dark,
         };
         ferrite_design::init(appearance, cx);
-        // FERRITE_FPS=60|120|240… starts at that refresh rate (default 25).
+        // FERRITE_FPS=60|120|240… starts at that refresh rate (default 240).
         if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
             motion::set_fps(fps);
         }
@@ -331,6 +331,7 @@ fn main() {
         let options = chrome::window_options("Ferrite Showcase", size(px(1080.), px(860.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);
+            chrome::power_off_on_close(window, cx);
             cx.new(|cx| Showcase::new(window, cx))
         })
         .expect("failed to open the showcase window");

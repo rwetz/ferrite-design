@@ -18,7 +18,7 @@
 //! | [`interlace_in`] | page and panel switches, heavier than unroll |
 //! | [`tear`] | a system failure (shake is for *input* errors) |
 //! | [`ping`] | a new item: one dither ring steps out from a marker |
-//! | [`power_on_in`] | the app's first window, once, at launch |
+//! | [`power_on_in`] | a window opening — and, opted in, closing |
 
 use std::hash::Hash;
 use std::time::Duration;
@@ -395,9 +395,12 @@ impl RenderOnce for Ping {
     }
 }
 
-/// The app's first window powering on, CRT style: an amber line draws out
-/// from the centre and the picture opens vertically from it. Plays once,
-/// when it first appears. Wrap the window's root content in it.
+/// A window powering on, CRT style: an amber line draws out from the centre
+/// and the picture opens vertically from it. Plays every time the window
+/// opens. Wrap the window's root content in it.
+///
+/// With `chrome::power_off_on_close` registered, it also plays the
+/// switch-off in reverse when the window is closed.
 #[derive(IntoElement)]
 pub struct PowerOnIn {
     id: ElementId,
@@ -410,8 +413,19 @@ pub fn power_on_in(id: impl Into<ElementId>, child: impl IntoElement) -> PowerOn
 
 impl RenderOnce for PowerOnIn {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let closing = crate::chrome::powering_off(window, cx);
+        let off_id = ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "off".into());
+        let off = animate::play_on_change(off_id, closing, motion::SLOW, window, cx);
         let p = animate::play(self.id, 0u8, motion::SLOW, window, cx);
-        power_on(self.child, power_on_band(p), hsla(palette(cx).accent))
+        let band = if !closing {
+            power_on_band(p)
+        } else if off.done {
+            (0., 0.) // Switched off; dark until the window goes.
+        } else {
+            // Power-on run backwards: collapse to the line, shrink to a point.
+            power_on_band(animate::Progress { t: 1. - off.t, frame: 0, done: false })
+        };
+        power_on(self.child, band, hsla(palette(cx).accent))
     }
 }
 

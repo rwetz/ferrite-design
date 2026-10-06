@@ -4,8 +4,8 @@
 //! Ferrite motion is **jerky yet smooth, bold yet contained**:
 //!
 //! - **Jerky:** every animation advances in whole frames at
-//!   [`motion::frame`] (25fps by default; apps can raise it). Nothing
-//!   glides; you can count the steps.
+//!   [`motion::frame`] (240fps by default, display-smooth; apps lower it
+//!   to 25 for the classic stepped look).
 //! - **Smooth:** the steps follow an ease-out ([`snap`]), so the first
 //!   frames take big bites and the last ones settle — a steady cadence that
 //!   reads as fluid, not broken.

@@ -210,11 +210,13 @@ renders them (§3.2).
 
 ## 6. Motion
 
-Nexis glides; Ferrite **steps**. The brief: **jerky yet smooth, bold yet
-contained.**
+Nexis glides on springs; Ferrite **snaps**. The brief: **jerky yet smooth,
+bold yet contained.**
 
-- **Jerky** — every animation advances in whole frames at 25fps
-  (`motion::FRAME`). Nothing glides; you can count the steps.
+- **Jerky** — the curve is front-loaded and the effects are mechanical
+  (scan lines, dither, noise, tables of keyframes). Apps run at 240fps by
+  default, as smooth as the display; `motion::set_fps(25)` brings back the
+  classic stepped look, where you can count the frames (§6.2).
 - **Smooth** — the steps follow one steep ease-out (`animate::snap`, cubic),
   so the first frames take big bites and the last ones settle. A steady
   cadence plus a front-loaded curve reads as fluid, not broken.
@@ -227,8 +229,8 @@ contained.**
 | Token | Value | Use |
 |---|---|---|
 | — | instant | hover, select, focus — anything the pointer does continuously |
-| `motion::FRAME` | 40ms | one step at the default 25fps; the fixed beat for table effects |
-| `motion::frame()` | 40ms default · 4.2–83ms | the live step for smooth effects; `motion::set_fps` (12/25/30/60/120/240) |
+| `motion::FRAME` | 40ms | the classic 25fps step; the fixed beat for table effects |
+| `motion::frame()` | 4.2ms default (240fps) · up to 83ms | the live step for smooth effects; `motion::set_fps` (12/25/30/60/120/240) |
 | `motion::FAST` | 120ms · 3 frames | menus, popovers, switch thumbs |
 | `motion::BASE` | 200ms · 5 frames | modals, pages, tab bars, decrypts |
 | `motion::SLOW` | 320ms · 8 frames | shakes, number rolls, large unrolls |
@@ -259,13 +261,15 @@ contained.**
 | **tear** | three horizontal bands jolt sideways for three frames, 6px max | system failures — shake is for *input* errors (`tear`) |
 | **ping** | a square dither ring steps out 8px, ▓ → ▒ → ░ | a new item arriving at a marker (`ping`) |
 | **seek** | the active edge steps from the old tab to the new one, resizing | tab strips |
-| **power-on** | an amber line draws out from the centre, then the picture opens vertically | the app's first window, once (`power_on_in`) |
+| **power-on / off** | an amber line draws out from the centre, then the picture opens vertically; closing runs it backwards | every window, each launch (`power_on_in`); the switch-off with `chrome::power_off_on_close` |
 
 ### 6.2 Refresh rate
 
-Apps can raise the step rate with `motion::set_fps` (the examples take
-`FERRITE_FPS` and have a REFRESH picker). It changes how *finely* an
-effect steps, never how long it lasts:
+The default is 240fps (`motion::DEFAULT_FPS`): smooth on any common
+display, 120Hz included. Apps — or their users — lower it with
+`motion::set_fps` for the stepped CRT look (25 is the classic). The
+examples take `FERRITE_FPS` and have a REFRESH picker. The rate changes
+how *finely* an effect steps, never how long it lasts:
 
 - **Smooth effects** (unroll, dissolve, travel, grow, develop, interlace,
   power-on, seek, and anything on `p.t` / `p.eased()`) take more, smaller
@@ -274,24 +278,26 @@ effect steps, never how long it lasts:
   churn) index a keyframe table by `p.frame`, which counts fixed 40ms
   beats at any rate — so their timing never changes.
 - Cost is per redraw: an idle window still does no work, but anything
-  playing redraws at the chosen rate (the showcase's always-running
-  progress demo, which steps every second frame: ~9% of a core at 25fps,
-  ~19% at 60 on an M-series Mac).
-  Above the display's own refresh, extra frames are never seen.
+  playing redraws at the chosen rate, up to the display's refresh (gpui
+  draws on vsync, so 240 on a 60Hz panel costs about what 60 does). The
+  showcase's always-running progress demo is the worst case: roughly 40%
+  of a core at 240 and ~9% at 25 on an M-series Mac.
 
 ### 6.3 Rules
 
 - **Entrances animate; exits don't.** Closing is instant — the user has
-  already moved on.
+  already moved on. One exception: a window switching off like a CRT
+  (320ms), because that is the machine powering down, not content leaving.
 - **Continuous input never animates** (hover, drag, typing, scrolling),
   and neither does **live data** — a meter fed several times a second
   updates instantly (`.roll(true)` is for values that change as events).
   Motion marks *events*; something always moving is noise, and it keeps
-  the window redrawing at 25fps.
+  the window redrawing at the refresh rate.
 - **One effect per event.** A dialog unrolls; it doesn't also slide and
   shake.
 - **Periodic motion runs on timers**, not repeating animations (PITFALLS
-  §17). Clips do too: `animate::play` ticks at 25fps only while playing.
+  §17). Clips do too: `animate::play` ticks at the refresh rate only
+  while playing.
 - **Reduced motion:** every clip returns "done" — the end state renders
   immediately; blinks go solid.
 

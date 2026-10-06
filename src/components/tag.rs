@@ -139,7 +139,7 @@ impl Meter {
     /// that change as *events* (a job finishing, a quota used). Leave it off
     /// for live feeds that update several times a second: continuous data
     /// doesn't animate (DESIGN_LANGUAGE §6.2), and a meter that's always
-    /// rolling keeps the window redrawing at 25fps.
+    /// rolling keeps the window redrawing at the refresh rate.
     pub fn roll(mut self, roll: bool) -> Self {
         self.roll = roll;
         self

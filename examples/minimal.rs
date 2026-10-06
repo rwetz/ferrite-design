@@ -6,7 +6,7 @@
 // Release builds are GUI-subsystem on Windows: no console window behind the app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ferrite_design::{Appearance, chrome, components::status_bar, palette, tokens::hsla};
+use ferrite_design::{Appearance, chrome, components::{power_on_in, status_bar}, palette, tokens::hsla};
 use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
            Subscription, Window, div, px, size};
 
@@ -17,12 +17,13 @@ struct MyApp {
 impl Render for MyApp {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
-        div()
+        // CRT power-on at every launch; switch-off on close (step 4 below).
+        power_on_in("power", div()
             .flex().flex_col().size_full()
             .bg(hsla(p.bg)).text_color(hsla(p.fg))
             .child(chrome::title_bar("My App"))
             .child(div().flex_1().min_h_0() /* your content */)
-            .child(status_bar().left("READY"))
+            .child(status_bar().left("READY")))
     }
 }
 
@@ -36,7 +37,9 @@ fn main() {
         cx.open_window(options, |window, cx| {
             // 3. Square corners on Windows 11.
             chrome::square_corners(window);
-            // 4. Your view is the window's root — no wrapper needed.
+            // 4. Closing plays the CRT switch-off (drawn by power_on_in).
+            chrome::power_off_on_close(window, cx);
+            // 5. Your view is the window's root — no wrapper needed.
             cx.new(|_| MyApp { _appearance: ferrite_design::theme::follow_system(window) })
         })
         .unwrap();

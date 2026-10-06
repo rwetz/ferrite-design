@@ -22,13 +22,18 @@ use std::time::Duration;
 
 use gpui::App;
 
-/// The default stepped frame. ~25fps: deliberately chunkier than the
-/// display rate. Also the fixed beat for *table* effects (shake, stamp,
-/// toast step-in, decrypt churn), which keep their timing at any rate.
+/// The classic stepped frame, ~25fps: chunkier than the display, the CRT
+/// look (`set_fps(25)`). Also the fixed beat for *table* effects (shake,
+/// stamp, toast step-in, decrypt churn), which keep their timing at any rate.
 pub const FRAME: Duration = Duration::from_millis(40);
 
+/// The default refresh rate: as smooth as any common display shows (120Hz
+/// ProMotion included). Apps lower it with [`set_fps`] for the stepped look.
+pub const DEFAULT_FPS: u32 = 240;
+
 /// The refresh rates an app can offer, in frames per second. 25 is the
-/// default; above the display's own refresh, extra frames are never seen.
+/// classic stepped look, 240 the default; above the display's own refresh,
+/// extra frames are never seen.
 pub const RATES: [u32; 6] = [12, 25, 30, 60, 120, 240];
 
 /// The fastest frame [`set_frame`] accepts (240fps).
@@ -36,7 +41,7 @@ pub const MIN_FRAME: Duration = Duration::from_micros(4_167);
 /// The slowest frame [`set_frame`] accepts (~12fps).
 pub const MAX_FRAME: Duration = Duration::from_micros(83_334);
 
-static FRAME_MICROS: AtomicU64 = AtomicU64::new(40_000);
+static FRAME_MICROS: AtomicU64 = AtomicU64::new(1_000_000 / DEFAULT_FPS as u64);
 
 /// The live frame: how often clips, loading dither and other *smooth*
 /// motion (unroll, dissolve, travel, grow, develop…) take a step. Faster
@@ -114,6 +119,7 @@ mod tests {
             assert_eq!(fps_for(clamp_frame(frame_for(fps))), fps);
         }
         assert_eq!(fps_for(FRAME), 25);
+        assert_eq!(fps_for(Duration::from_micros(1_000_000 / DEFAULT_FPS as u64)), DEFAULT_FPS);
     }
 
     #[test]

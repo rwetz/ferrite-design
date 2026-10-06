@@ -5,11 +5,13 @@
 //! hard-won; see docs/PITFALLS.md) but draws text-mode controls — `_` `□` `x` in the
 //! display face — and a dithered drag strip instead of a gradient.
 
+use std::collections::HashSet;
+
 use gpui::{
     AnyElement, App, Bounds, Decorations, InteractiveElement, IntoElement, MouseButton,
     ParentElement, Pixels, RenderOnce, SharedString, Size, StatefulInteractiveElement, Styled,
     TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowDecorations, WindowOptions, div, point, prelude::FluentBuilder as _, px, size,
+    WindowDecorations, WindowId, WindowOptions, div, point, prelude::FluentBuilder as _, px, size,
 };
 
 
@@ -252,11 +254,73 @@ fn control(kind: Control, window: &mut Window, cx: &mut App) -> impl IntoElement
                 match kind {
                     Control::Minimize => window.minimize_window(),
                     Control::Maximize | Control::Restore => window.zoom_window(),
-                    Control::Close => window.remove_window(),
+                    Control::Close => {
+                        if close_request(window, cx) {
+                            window.remove_window();
+                        }
+                    }
                 }
             })
         })
         .child(glyph)
+}
+
+// ── Power off ─────────────────────────────────────────────────────────────
+
+/// Which windows switch off like a CRT when closed, and which are doing it
+/// now. `components::power_on_in` reads it to play the switch-off.
+#[derive(Default)]
+struct PowerOff {
+    enabled: HashSet<WindowId>,
+    closing: HashSet<WindowId>,
+}
+
+impl gpui::Global for PowerOff {}
+
+/// Close this window CRT style: the picture collapses to an amber line and
+/// the line shrinks into the centre, then the window closes (320ms). The
+/// one exit Ferrite animates — it is the machine switching off. Call from
+/// the `open_window` closure, and wrap the root in
+/// `components::power_on_in`, which draws it.
+///
+/// Covers every close request the OS routes through the window (the
+/// traffic light, Alt+F4, the Windows title-bar ✕) and Ferrite's own Linux
+/// close button. Quitting the whole app (⌘Q) skips it. Reduced motion
+/// closes at once.
+pub fn power_off_on_close(window: &mut Window, cx: &mut App) {
+    let id = window.window_handle().window_id();
+    cx.default_global::<PowerOff>().enabled.insert(id);
+    window.on_window_should_close(cx, close_request);
+}
+
+/// Whether this window is mid power-off.
+pub fn powering_off(window: &Window, cx: &App) -> bool {
+    cx.try_global::<PowerOff>().is_some_and(|p| p.closing.contains(&window.window_handle().window_id()))
+}
+
+/// A request to close `window`: `true` to close now, `false` to wait while
+/// it switches off (it then closes itself).
+fn close_request(window: &mut Window, cx: &mut App) -> bool {
+    let id = window.window_handle().window_id();
+    if crate::motion::reduced(cx) || !cx.try_global::<PowerOff>().is_some_and(|p| p.enabled.contains(&id)) {
+        return true;
+    }
+    if !cx.default_global::<PowerOff>().closing.insert(id) {
+        return false; // Already switching off; a second click waits too.
+    }
+    window.refresh();
+    window
+        .spawn(cx, async move |cx| {
+            cx.background_executor().timer(crate::motion::SLOW + crate::motion::FRAME).await;
+            let _ = cx.update(|window, cx| {
+                let state = cx.default_global::<PowerOff>();
+                state.closing.remove(&id);
+                state.enabled.remove(&id);
+                window.remove_window();
+            });
+        })
+        .detach();
+    false
 }
 
 // ── Window frame ──────────────────────────────────────────────────────────

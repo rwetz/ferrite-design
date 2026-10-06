@@ -446,7 +446,7 @@ impl Components {
                 div()
                     .body(text::SM)
                     .text_color(hsla(p.fg_dim))
-                    .child(format!("Stepped at {}fps, eased out: big bites first, then it settles. Every effect stays in its box and is over in a third of a second.", motion::fps())),
+                    .child(format!("Running at {}fps, eased out: big bites first, then it settles. Drop to 25 for the classic stepped look. Every effect stays in its box and is over in a third of a second.", motion::fps())),
             )
             .child(
                 div().flex().flex_row().gap(space::ROW)
@@ -1248,7 +1248,7 @@ fn main() {
             _ => Appearance::Dark,
         };
         ferrite_design::init(appearance, cx);
-        // FERRITE_FPS=60|120|240… starts at that refresh rate (default 25).
+        // FERRITE_FPS=60|120|240… starts at that refresh rate (default 240).
         if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
             motion::set_fps(fps);
         }
@@ -1256,6 +1256,7 @@ fn main() {
         let options = chrome::window_options("Ferrite Components", size(px(1180.), px(900.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);
+            chrome::power_off_on_close(window, cx);
             cx.new(|cx| Components::new(window, cx))
         })
         .expect("failed to open the components window");
