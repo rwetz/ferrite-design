@@ -105,13 +105,21 @@ pub struct Meter {
     label: Option<SharedString>,
     show_value: bool,
     roll: bool,
+    id: Option<SharedString>,
 }
 
 pub fn meter(value: f32) -> Meter {
-    Meter { value, segments: 20, warn: 0.7, critical: 0.9, label: None, show_value: true, roll: false }
+    Meter { value, segments: 20, warn: 0.7, critical: 0.9, label: None, show_value: true, roll: false, id: None }
 }
 
 impl Meter {
+    /// A key for the roll state. Defaults to the label; set one when a view
+    /// has several unlabelled meters, or two with the same label.
+    pub fn id(mut self, id: impl Into<SharedString>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
     pub fn segments(mut self, n: u32) -> Self {
         self.segments = n.max(1);
         self
@@ -170,8 +178,8 @@ impl RenderOnce for Meter {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
         // Roll to the new value segment by segment (LED-style) instead of
-        // jumping. Keyed by label: give meters in one view distinct labels.
-        let key = format!("meter-{}", self.label.clone().unwrap_or_default());
+        // jumping. Keyed by `.id()`, else by label.
+        let key = format!("meter-{}", self.id.clone().or_else(|| self.label.clone()).unwrap_or_default());
         let value = self.value.clamp(0., 1.);
         let roll = window.use_keyed_state(gpui::ElementId::Name(format!("{key}-roll").into()), cx, move |_, _| Roll { from: value, to: value });
         // Without `roll`, the clip never changes key, so it never runs.

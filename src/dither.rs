@@ -353,6 +353,26 @@ impl Styled for Dither {
 /// a gigapixel texture.
 const MAX_SIDE: u32 = 8192;
 
+/// Paint `field` over `bounds` from inside another element's paint — the
+/// [`Dither`] element's own path (device-snapped, cached, one quad). Charts
+/// use it under a content mask to dither an area under a line: the pattern
+/// stays anchored to `bounds`, so clipped pieces line up.
+pub(crate) fn paint_field(field: Field, bounds: Bounds<Pixels>, ink: Hsla, window: &mut Window) {
+    let sf = window.scale_factor();
+    let ox = (f32::from(bounds.origin.x) * sf).round();
+    let oy = (f32::from(bounds.origin.y) * sf).round();
+    let w = ((f32::from(bounds.size.width) * sf).round() as u32).min(MAX_SIDE);
+    let h = ((f32::from(bounds.size.height) * sf).round() as u32).min(MAX_SIDE);
+    if w == 0 || h == 0 {
+        return;
+    }
+    let (ink, paper, cell, pattern) = (bgra(ink), [0, 0, 0, 0], 2, Pattern::Bayer4);
+    let source = Source::Field(field);
+    let key = raster::Key::Dither { source: source.key(), pattern, w, h, cell, ink, paper };
+    let image = raster::image(key, window, || (w, h, raster_source(&source, pattern, w, h, cell, ink, paper)));
+    raster::paint(image, ox / sf, oy / sf, w, h, window);
+}
+
 impl RenderOnce for Dither {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ink_color = self
@@ -499,7 +519,7 @@ mod tests {
     #[test]
     #[ignore]
     fn regenerate_blue_noise() {
-        let ranks = void_and_cluster(BLUE_NOISE_SIDE as usize, 1.5, 0x5EED_F3_2026);
+        let ranks = void_and_cluster(BLUE_NOISE_SIDE as usize, 1.5, 0x005E_EDF3_2026);
         let bytes: Vec<u8> = ranks.iter().flat_map(|r| r.to_le_bytes()).collect();
         std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/dither/blue-noise-64.bin"), bytes).unwrap();
     }

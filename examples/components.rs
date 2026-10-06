@@ -1,5 +1,5 @@
-//! Every Ferrite component, live and wired to state, on three pages:
-//! controls, data & input, layout.
+//! Every Ferrite component, live and wired to state, one page per family:
+//! controls, forms, data & input, navigation, charts, layout, motion.
 //!
 //!     cargo run --example components
 //!     FERRITE_APPEARANCE=light cargo run --example components
@@ -15,12 +15,15 @@ use ferrite_design::{
     components::{
         Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, submenu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, toast, tooltip, Toast, Toaster,
-        InputEvent, SortDir, TextInput, afterglow, column, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
+        InputEvent, SortDir, TextInput, Date, Presence, accordion, accordion_section, alert, avatar, bar_chart, breadcrumb,
+        calendar, cascade_in, date_picker, drawer, event, field, flash, heatmap, line_chart, number_input, pagination,
+        property_list, scan, select, sidebar, skeleton, skeleton_text, sparkline, stat, steps, timeline, toolbar, wipe_in, afterglow, column, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
     },
     dither::{self, dither},
     icon::icon,
     motion, palette, theme,
     tokens::{hsla, space, text},
+    components::tag::Tone,
 };
 use gpui::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render,
@@ -36,7 +39,8 @@ const FILES: [(Icon, &str, &str); 5] = [
 ];
 const PROCS: [(&str, &str); 4] = [("ferrite-atlas", "pid 4412"), ("cargo", "pid 9021"), ("rust-analyzer", "pid 3310"), ("showcase", "pid 7777")];
 const MODES: [&str; 3] = ["Fast", "Balanced", "Thorough"];
-const PAGES: [&str; 4] = ["Controls", "Data & input", "Layout", "Motion"];
+const PAGES: [&str; 7] = ["Controls", "Forms", "Data & input", "Navigation", "Charts", "Layout", "Motion"];
+const REGIONS: [&str; 4] = ["eu-west-1", "us-east-1", "ap-south-1", "sa-east-1"];
 const LOG_LINES: usize = 10_000;
 const PROC_TABLE: [(&str, u32, f32, u32, &str); 6] = [
     ("ferrite-atlas", 4412, 31.0, 412, "run"),
@@ -60,6 +64,7 @@ struct Proc {
 enum Modal {
     Delete,
     Rename,
+    Motion,
 }
 
 struct Components {
@@ -75,7 +80,22 @@ struct Components {
     tick: u64,
     inputs: Vec<Entity<TextInput>>,
     name_errors: u32,
-    replay: [u32; 13],
+    replay: [u32; 24],
+    // Forms
+    region: Option<usize>,
+    workers: f64,
+    timeout: f64,
+    launch: Option<Date>,
+    handle_error: Option<SharedString>,
+    // Navigation
+    nav: SharedString,
+    rail: bool,
+    pager: usize,
+    wizard: usize,
+    drawer: bool,
+    alerts: [bool; 3],
+    // Charts
+    series_seed: u64,
     /// Built once: the develop demo's picture.
     orb: dither::Picture,
     _input_subs: Vec<Subscription>,
@@ -158,7 +178,19 @@ impl Components {
             tick: 0,
             inputs,
             name_errors: 0,
-            replay: [0; 13],
+            replay: [0; 24],
+            region: Some(0),
+            workers: 8.,
+            timeout: 2.5,
+            launch: Some(Date::new(2026, 10, 14)),
+            handle_error: None,
+            nav: "overview".into(),
+            rail: false,
+            pager: 4,
+            wizard: 1,
+            drawer: false,
+            alerts: [true; 3],
+            series_seed: 0,
             orb: dither::Picture::from_fn(240, 160, orb_scene),
             _input_subs: input_subs,
             word_wrap: true,
@@ -306,6 +338,9 @@ impl Components {
             Button::new(("replay", i)).label("Replay").icon(Icon::Refresh).small().ghost().on_click(move |_, _, cx| {
                 let _ = this.update(cx, |v, cx| {
                     v.replay[i] += 1;
+                    if i == 21 {
+                        v.notify(toast("Stepped in").message("dither + 40→14→4→0px"), cx);
+                    }
                     cx.notify();
                 });
             })
@@ -412,6 +447,64 @@ impl Components {
                 .child("READY.")
         });
 
+        let lines = |items: &[&'static str]| {
+            div()
+                .w(px(260.))
+                .flex()
+                .flex_col()
+                .border_1()
+                .border_color(hsla(p.line_strong))
+                .bg(hsla(p.raised))
+                .children(items.iter().map(|l| div().h(px(24.)).px_3().flex().items_center().body(text::SM).text_color(hsla(p.fg_dim)).child(*l)))
+        };
+        let wipe_demo = wipe_in(("m-wipe", r[13] as usize), r[13], lines(&["inspector", "name   ferrite-atlas", "pid    4412", "state  run"])).from_right();
+        let scan_demo = scan("m-scan", r[14], lines(&["query: errors last 1h", "rows: 42", "took 18ms"]));
+        let flash_demo = flash("m-flash", r[15], div().px_4().py_2().border_1().border_color(hsla(p.accent)).display(Scale::X2, window).text_color(hsla(p.accent_text)).child("3 NEW"));
+        let cascade_demo = cascade_in(("m-cascade", r[16] as usize), r[16])
+            .w(px(260.))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .children(["mount /dev/fe0", "load palette", "warm dither cache", "bind keys", "ready"].iter().map(|l| {
+                div().h(px(20.)).px_2().flex().items_center().bg(hsla(p.raised)).body(text::SM).text_color(hsla(p.fg_dim)).child(*l)
+            }));
+        let boot_demo = div().w(px(260.)).child(panel(format!("Uplink {}", r[19] + 1)).meta("ok").child(div().body(text::SM).text_color(hsla(p.fg_dim)).child("title decrypts, rule draws on")));
+        let on = r[17].is_multiple_of(2);
+        let toggles_demo = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(checkbox("m-check").label("Stamped").checked(!on))
+            .child(switch("m-switch").label("Travels").checked(!on))
+            .child(segmented("m-seg").option("One").option("Two").option("Three").selected((r[17] % 3) as usize));
+        let sweep_demo = div().w(px(240.)).flex().flex_col().children((0..3usize).map(|i| list_item(("m-sweep", i), ["alpha.rs", "beta.rs", "gamma.rs"][i]).icon(Icon::File).selected(r[18] as usize % 3 == i)));
+        let modal_demo = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .items_center()
+            .child(Button::new("m-toast").label("Push a toast").small().on_click(cx.listener(|this, _, _, cx| this.notify(toast("Stepped in").message("dither + 40→14→4→0px"), cx))))
+            .child(Button::new("m-dialog").label("Open a dialog").small().on_click(cx.listener(|this, _, _, cx| {
+                this.dialog = Some(Modal::Motion);
+                cx.notify();
+            })))
+            .child(
+                dialog("motion-dialog")
+                    .open(self.dialog == Some(Modal::Motion))
+                    .title("Screen door")
+                    .description("The backdrop steps up the Bayer ramp to 69% while the panel unrolls.")
+                    .on_close({
+                        let this = cx.weak_entity();
+                        move |_, cx| {
+                            let _ = this.update(cx, |v, cx| {
+                                v.dialog = None;
+                                cx.notify();
+                            });
+                        }
+                    }),
+            )
+            .child(div().body(text::XS).text_color(hsla(p.fg_faint)).child("the replay button does nothing here"));
+
         let rates = motion::RATES;
         let current = rates.iter().position(|&r| r == motion::fps()).unwrap_or(1);
         let rate_picker = rates.iter().fold(segmented("fps"), |seg, r| seg.option(format!("{r}")))
@@ -437,6 +530,7 @@ impl Components {
                     .child(
                         div()
                             .flex_1()
+                            .min_w_0()
                             .body(text::SM)
                             .text_color(hsla(p.fg_dim))
                             .child("Smooth effects take finer steps at higher rates; timed ones (shake, tear, ping, stamp) keep their beat. Costs CPU only while something plays."),
@@ -475,8 +569,21 @@ impl Components {
             .child(
                 div().flex().flex_row().gap(space::ROW)
                     .child(tile(12, "Power-on", "launch · once per window", power_demo.into_any_element()))
-                    .child(div().flex_1())
-                    .child(div().flex_1()),
+                    .child(tile(13, "Wipe", "drawers · sidebars", wipe_demo.into_any_element()))
+                    .child(tile(14, "Scan", "refreshed in place", scan_demo.into_any_element())),
+            )
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(tile(15, "Flash", "look here · any element", flash_demo.into_any_element()))
+                    .child(tile(16, "Cascade", "items one frame apart", cascade_demo.into_any_element()))
+                    .child(tile(19, "Boot", "panel headers", boot_demo.into_any_element())),
+            )
+            .child(rule(Some("motion inside the components"), window, cx))
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(tile(17, "Stamp · travel · grow", "checkbox · switch · segmented", toggles_demo.into_any_element()))
+                    .child(tile(18, "Sweep", "selection fills in", sweep_demo.into_any_element()))
+                    .child(tile(21, "Step-in · screen door", "toasts · modals", modal_demo.into_any_element())),
             )
     }
 
@@ -799,6 +906,426 @@ impl Components {
             .gap(space::ROW)
             .child(div().flex().flex_row().gap(space::ROW).child(input).child(dialogs))
             .child(div().flex().flex_row().gap(space::ROW).child(tree_panel).child(table_panel))
+    }
+}
+
+/// The pages added with forms, navigation and charts.
+impl Components {
+    /// A handler for a controlled component: writes the new value into the
+    /// view through `f`, then redraws.
+    fn upd<T: 'static>(cx: &mut Context<Self>, f: fn(&mut Components, &T)) -> impl Fn(&T, &mut Window, &mut App) + 'static {
+        let this = cx.weak_entity();
+        move |v, _, cx| {
+            let _ = this.update(cx, |c, cx| {
+                f(c, v);
+                cx.notify();
+            });
+        }
+    }
+
+    fn forms_page(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        let handle = self.inputs[0].read(cx).value();
+        let form = panel("Field · select · number · date").meta("controlled · Tab walks the form").flex_1().child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    field("f-handle", "Handle")
+                        .required()
+                        .hint("lowercase, dashes allowed — Enter checks it")
+                        .error(self.handle_error.clone())
+                        .child(self.inputs[0].clone()),
+                )
+                .child(
+                    field("f-region", "Region").hint("where new workers start").child(
+                        select("region")
+                            .options(REGIONS)
+                            .selected(self.region)
+                            .width(px(220.))
+                            .on_change(Self::upd(cx, |c, i: &usize| {
+                                c.region = Some(*i);
+                                c.last = format!("REGION {}", REGIONS[*i].to_uppercase()).into();
+                            })),
+                    ),
+                )
+                .child(field("f-disabled", "Tier").child(select("tier").options(["Enterprise"]).selected(Some(0)).disabled(true)))
+                .child(
+                    field("f-workers", "Workers").child(
+                        number_input("workers")
+                            .value(self.workers)
+                            .range(1., 64.)
+                            .on_change(Self::upd(cx, |c, v: &f64| c.workers = *v)),
+                    ),
+                )
+                .child(
+                    field("f-timeout", "Timeout").child(
+                        number_input("timeout")
+                            .value(self.timeout)
+                            .range(0.5, 30.)
+                            .step(0.5)
+                            .digits(2)
+                            .decimals(1)
+                            .suffix("s")
+                            .on_change(Self::upd(cx, |c, v: &f64| c.timeout = *v)),
+                    ),
+                )
+                .child(
+                    field("f-launch", "Launch").hint("opens a calendar; arrows move, PgUp/PgDn page").child(
+                        date_picker("launch")
+                            .selected(self.launch)
+                            .on_select(Self::upd(cx, |c, d: &Date| {
+                                c.launch = Some(*d);
+                                c.last = format!("LAUNCH {d}").into();
+                            })),
+                    ),
+                )
+                .child(
+                    div().flex().flex_row().justify_end().gap_2().pt_2().border_t_1().border_color(hsla(p.line)).child(Button::new("f-reset").label("Reset").ghost().on_click(
+                        cx.listener(|this, _, _, cx| {
+                            this.handle_error = None;
+                            this.workers = 8.;
+                            this.timeout = 2.5;
+                            this.region = Some(0);
+                            cx.notify();
+                        }),
+                    ))
+                    .child(Button::new("f-save").label("Save").primary().on_click(cx.listener(move |this, _, _, cx| {
+                        let name = this.inputs[0].read(cx).value();
+                        this.handle_error = if name.trim().is_empty() {
+                            Some("a handle is required".into())
+                        } else if name.chars().any(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')) {
+                            Some("only a–z, 0–9 and dashes".into())
+                        } else {
+                            None
+                        };
+                        let ok = this.handle_error.is_none();
+                        this.log(if ok { "SAVED" } else { "REJECTED" }, cx);
+                    }))),
+                )
+                .child(div().body(text::XS).text_color(hsla(p.fg_faint)).child(format!("handle: {handle:?}"))),
+        );
+
+        let today = Date::new(2026, 10, 6);
+        let cal = panel("Calendar").meta("inline month grid").child(
+            calendar("inline-cal")
+                .today(today)
+                .selected(self.launch)
+                .range(Some(today), None)
+                .on_select(Self::upd(cx, |c, d: &Date| c.launch = Some(*d))),
+        );
+
+        let settings = panel("Accordion").meta("settings, grouped").flex_1().child(
+            accordion("settings")
+                .open(["General"])
+                .section(
+                    accordion_section("General")
+                        .meta("3")
+                        .child(switch("acc-tele").label("Telemetry").checked(self.telemetry).on_change(Self::upd(cx, |c, v: &bool| c.telemetry = *v)))
+                        .child(checkbox("acc-wrap").label("Word wrap").checked(self.word_wrap).on_change(Self::upd(cx, |c, v: &bool| c.word_wrap = *v)))
+                        .child(checkbox("acc-hidden").label("Show hidden files").checked(self.show_hidden).on_change(Self::upd(cx, |c, v: &bool| c.show_hidden = *v))),
+                )
+                .section(
+                    accordion_section("Appearance").meta("2").child(
+                        segmented("acc-density").option("Compact").option("Cozy").option("Roomy").selected(self.density).on_select(Self::upd(cx, |c, i: &usize| c.density = *i)),
+                    ),
+                )
+                .section(
+                    accordion_section("Danger zone").child(alert("acc-danger", "Irreversible").danger().message("Deleting a workspace removes its history.")).child(
+                        Button::new("acc-del").label("Delete workspace").icon(Icon::Trash).danger().small(),
+                    ),
+                ),
+        );
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(space::ROW)
+            .child(div().flex().flex_row().gap(space::ROW).child(form).child(cal))
+            .child(settings)
+    }
+
+    fn nav_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        let content_for = |key: &str| match key {
+            "overview" => "Everything at a glance.",
+            "logs" => "10,000 lines, virtualised.",
+            "jobs" => "Queued, running, done.",
+            "alerts" => "What needs you now.",
+            _ => "Settings, by section.",
+        };
+        let nav = self.nav.clone();
+        let shell = panel("Sidebar · toolbar · breadcrumb").meta("an app shell").child(
+            div()
+                .flex()
+                .flex_row()
+                .h(px(340.))
+                .border_1()
+                .border_color(hsla(p.line))
+                .child(
+                    sidebar("nav")
+                        .brand("Atlas")
+                        .collapsed(self.rail)
+                        .section("Workspace")
+                        .item_with_meta("overview", "Overview", Icon::Home, "")
+                        .item_with_meta("logs", "Logs", Icon::Terminal, "10k")
+                        .item_with_meta("jobs", "Jobs", Icon::Play, "3")
+                        .section("Account")
+                        .item_with_meta("alerts", "Alerts", Icon::Bell, "2")
+                        .item("settings", "Settings", Icon::Sliders)
+                        .selected(nav.clone())
+                        .footer(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .gap_2()
+                                .child(avatar("Ryan Wetzstein").size(px(24.)).presence(Presence::Online))
+                                .when(!self.rail, |el| el.child(div().body(text::SM).text_color(hsla(p.fg_dim)).child("ryan"))),
+                        )
+                        .on_select(Self::upd(cx, |c, k: &SharedString| c.nav = k.clone())),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_w_0()
+                        .child(
+                            toolbar()
+                                .child(Button::new("rail").icon(Icon::Menu).small().ghost().tooltip("Collapse sidebar").on_click(cx.listener(|this, _, _, cx| {
+                                    this.rail = !this.rail;
+                                    cx.notify();
+                                })))
+                                .separator()
+                                .child(breadcrumb("crumbs").crumbs(["atlas", "workspace"]).crumb(nav.clone()).on_select(Self::upd(cx, |c, _: &usize| c.nav = "overview".into())))
+                                .spacer()
+                                .child(Button::new("tb-refresh").icon(Icon::Refresh).small().tooltip("Refresh").on_click(cx.listener(|this, _, _, cx| {
+                                    this.replay[20] += 1;
+                                    cx.notify();
+                                })))
+                                .child(Button::new("tb-details").label("Details").small().on_click(cx.listener(|this, _, _, cx| {
+                                    this.drawer = true;
+                                    cx.notify();
+                                }))),
+                        )
+                        .child(
+                            scan(
+                                "nav-scan",
+                                self.replay[20],
+                                wipe_in("nav-page", &nav, {
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap_3()
+                                        .p_4()
+                                        .child(div().display(Scale::X2, window).text_color(hsla(p.fg)).child(nav.to_uppercase()))
+                                        .child(div().body(text::BASE).text_color(hsla(p.fg_dim)).child(content_for(&nav)))
+                                        .child(skeleton_text("nav-skel", 3, px(10.)))
+                                }),
+                            ),
+                        ),
+                ),
+        );
+
+        let paging = panel("Pagination · steps").meta("controlled").flex_1().child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(section("pagination", window, cx))
+                .child(pagination("pager").total(20).current(self.pager).on_change(Self::upd(cx, |c, i: &usize| c.pager = *i)))
+                .child(div().body(text::SM).text_color(hsla(p.fg_dim)).child(format!("page {} of 20 · ←/→ when focused", self.pager + 1)))
+                .child(section("steps", window, cx))
+                .child(steps("wizard").step("Account").step("Workspace").step("Invite").step("Done").current(self.wizard).on_select(Self::upd(cx, |c, i: &usize| c.wizard = *i)))
+                .child(
+                    row()
+                        .child(Button::new("w-back").label("Back").small().disabled(self.wizard == 0).on_click(cx.listener(|this, _, _, cx| {
+                            this.wizard = this.wizard.saturating_sub(1);
+                            cx.notify();
+                        })))
+                        .child(Button::new("w-next").label("Next").small().primary().disabled(self.wizard >= 4).on_click(cx.listener(|this, _, _, cx| {
+                            this.wizard = (this.wizard + 1).min(4);
+                            cx.notify();
+                        }))),
+                ),
+        );
+
+        let dismiss = |i: usize| {
+            let this = cx.weak_entity();
+            move |_: &mut Window, cx: &mut App| {
+                let _ = this.update(cx, |c, cx| {
+                    c.alerts[i] = false;
+                    cx.notify();
+                });
+            }
+        };
+        let alerts = panel("Alert · avatar · timeline").meta("inline feedback").flex_1().child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .when(self.alerts[0], |el| el.child(alert("a-info", "Indexing").message("1,204 files · results may be partial").on_close(dismiss(0))))
+                .when(self.alerts[1], |el| {
+                    el.child(
+                        alert("a-warn", "Disk almost full")
+                            .warning()
+                            .message("92% of C: used. Old builds can be pruned.")
+                            .action(Button::new("prune").label("Prune").small())
+                            .on_close(dismiss(1)),
+                    )
+                })
+                .when(self.alerts[2], |el| el.child(alert("a-ok", "Deployed").success().message("staging · build 4412").on_close(dismiss(2))))
+                .when(!self.alerts.iter().any(|a| *a), |el| {
+                    el.child(Button::new("a-reset").label("Bring them back").small().on_click(cx.listener(|this, _, _, cx| {
+                        this.alerts = [true; 3];
+                        cx.notify();
+                    })))
+                })
+                .child(section("avatar", window, cx))
+                .child(
+                    row()
+                        .child(avatar("ryan").presence(Presence::Online))
+                        .child(avatar("ferrite-atlas").presence(Presence::Busy))
+                        .child(avatar("nexis").presence(Presence::Away))
+                        .child(avatar("Ada Lovelace").initials())
+                        .child(avatar("Grace Hopper").initials().size(px(48.)).presence(Presence::Offline)),
+                )
+                .child(section("timeline", window, cx))
+                .child(
+                    timeline("feed")
+                        .event(event("12:04", "Deployed to staging").detail("build 4412 · 2.0s").tone(Tone::Success))
+                        .event(event("11:58", "Build failed").detail("error[E0308]: mismatched types").tone(Tone::Danger))
+                        .event(event("11:41", "Pushed 3 commits").detail("main · ryan").tone(Tone::Accent))
+                        .event(event("09:12", "Workspace created")),
+                ),
+        );
+
+        let details = drawer("details")
+            .open(self.drawer)
+            .title("Details")
+            .on_close({
+                let this = cx.weak_entity();
+                move |_, cx| {
+                    let _ = this.update(cx, |c, cx| {
+                        c.drawer = false;
+                        cx.notify();
+                    });
+                }
+            })
+            .child(
+                property_list()
+                    .row("name", "ferrite-atlas")
+                    .row("pid", "4412")
+                    .row_with("state", tag("run").accent())
+                    .row_with("cpu", meter(0.31).id("drawer-cpu").segments(12))
+                    .row("started", "2026-10-06 09:12")
+                    .row("command", "atlas --serve --port 7070"),
+            )
+            .child(section("recent", window, cx))
+            .child(timeline("drawer-feed").event(event("12:04", "healthy").tone(Tone::Success)).event(event("11:58", "restarted").tone(Tone::Warning)))
+            .footer(Button::new("drawer-kill").label("Kill").danger().small())
+            .footer(Button::new("drawer-close-btn").label("Close").small().shortcut("Esc").on_click(cx.listener(|this, _, _, cx| {
+                this.drawer = false;
+                cx.notify();
+            })));
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(space::ROW)
+            .child(shell)
+            .child(div().flex().flex_row().gap(space::ROW).child(paging).child(alerts))
+            .child(details)
+    }
+
+    fn charts_page(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        let seed = self.series_seed;
+        let wave = move |i: usize, k: f32| {
+            let t = i as f32 * 0.35 + seed as f32 * 1.3;
+            (40. + 30. * (t * k).sin() + 18. * (t * 0.37 + k).cos() + (i % 5) as f32 * 4.).max(0.)
+        };
+        let latency: Vec<f32> = (0..48).map(|i| wave(i, 1.)).collect();
+        let baseline: Vec<f32> = (0..48).map(|i| wave(i, 0.6) * 0.8).collect();
+        let hours: Vec<String> = (0..48).map(|i| format!("{:02}:{:02}", 9 + i / 4, (i % 4) * 15)).collect();
+
+        let tiles = div()
+            .flex()
+            .flex_row()
+            .gap(space::ROW)
+            .child(div().flex_1().child(stat("s-req", "Requests", "18.2K").delta(4.2).trend((0..24).map(|i| wave(i, 0.8))).caption("vs last week")))
+            .child(div().flex_1().child(stat("s-lat", "p95 latency", format!("{:.0}MS", latency[47])).delta(-6.5).lower_is_better().trend(latency.iter().copied().skip(24))))
+            .child(div().flex_1().child(stat("s-err", "Errors", "0.42%").delta(0.1).lower_is_better().trend((0..24).map(|i| wave(i, 2.1) * 0.1))))
+            .child(div().flex_1().child(stat("s-up", "Uptime", "99.98%").delta(0.0)));
+
+        let line = panel("Line chart").meta("stepped · dithered area · hover for values").child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(line_chart(("lat-chart", seed as usize), latency.clone()).title("Latency").compare(baseline).labels(hours).format(|v| format!("{v:.0}MS")))
+                .child(
+                    row()
+                        .child(Button::new("reseed").label("New data").icon(Icon::Refresh).small().on_click(cx.listener(|this, _, _, cx| {
+                            this.series_seed += 1;
+                            cx.notify();
+                        })))
+                        .child(div().body(text::SM).text_color(hsla(p.fg_dim)).child("Amber: this week. Dim: last week. The chart draws on once; new data lands instantly.")),
+                ),
+        );
+
+        let bars = panel("Bar chart").meta("hover a bar").flex_1().child(
+            bar_chart("deploys")
+                .bars([("Mon", 12.), ("Tue", 19.), ("Wed", 7.), ("Thu", 23.), ("Fri", 16.), ("Sat", 3.), ("Sun", 1.)])
+                .highlight(Some(3)),
+        );
+
+        let heat_rows: Vec<Vec<f32>> = (0..7)
+            .map(|d| {
+                (0..24)
+                    .map(|h| {
+                        let work = if (8..19).contains(&h) && d < 5 { 0.6 } else { 0.08 };
+                        let n = ((d * 31 + h * 17 + seed as usize * 7) % 13) as f32 / 13.;
+                        (work + n * 0.45 - 0.15).clamp(0., 1.)
+                    })
+                    .collect()
+            })
+            .collect();
+        let heat = panel("Heatmap").meta("weekday × hour · dither density").flex_1().child(heatmap(heat_rows).row_labels(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]));
+
+        let inline = panel("Sparkline").meta("inline, in rows").child(
+            div().flex().flex_col().children(PROC_TABLE.iter().enumerate().map(|(i, (name, _, cpu, _, _))| {
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_3()
+                    .h(px(26.))
+                    .child(div().w(px(140.)).body(text::SM).child(*name))
+                    .child(sparkline((0..20).map(|k| wave(k + i * 7, 1.3) * cpu / 40.)))
+                    .child(div().body(text::SM).text_color(hsla(p.fg_dim)).child(format!("{cpu:>5.1}%")))
+            })),
+        );
+
+        let loading = panel("Skeleton").meta("loading placeholders").flex_1().child(
+            div()
+                .flex()
+                .flex_row()
+                .gap_3()
+                .child(skeleton("sk-thumb").size(px(64.)))
+                .child(div().flex_1().child(skeleton_text("sk-text", 3, px(10.)))),
+        );
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(space::ROW)
+            .child(tiles)
+            .child(line)
+            .child(div().flex().flex_row().gap(space::ROW).child(bars).child(heat))
+            .child(div().flex().flex_row().gap(space::ROW).child(div().flex_1().child(inline)).child(loading))
     }
 }
 
@@ -1149,6 +1676,9 @@ impl Render for Components {
             })),
         );
 
+        let forms_page = self.forms_page(window, cx);
+        let nav_page = self.nav_page(window, cx);
+        let charts_page = self.charts_page(window, cx);
         let data_page = self.data_page(window, cx);
         let layout_page = self.layout_page(window, cx);
         let motion_page = self.motion_page(window, cx);
@@ -1179,6 +1709,9 @@ impl Render for Components {
                                 .tab(PAGES[1])
                                 .tab(PAGES[2])
                                 .tab(PAGES[3])
+                                .tab(PAGES[4])
+                                .tab(PAGES[5])
+                                .tab(PAGES[6])
                                 .selected(self.page)
                                 .on_select({
                                     let this = cx.weak_entity();
@@ -1191,9 +1724,12 @@ impl Render for Components {
                                     }
                                 }),
                         )
-                        .when(self.page == 1, |el| el.child(unroll_in("page-1", 1, data_page)))
-                        .when(self.page == 2, |el| el.child(unroll_in("page-2", 2, layout_page)))
-                        .when(self.page == 3, |el| el.child(unroll_in("page-3", 3, motion_page)))
+                        .when(self.page == 1, |el| el.child(unroll_in("page-1", 1, forms_page)))
+                        .when(self.page == 2, |el| el.child(unroll_in("page-2", 2, data_page)))
+                        .when(self.page == 3, |el| el.child(unroll_in("page-3", 3, nav_page)))
+                        .when(self.page == 4, |el| el.child(unroll_in("page-4", 4, charts_page)))
+                        .when(self.page == 5, |el| el.child(unroll_in("page-5", 5, layout_page)))
+                        .when(self.page == 6, |el| el.child(unroll_in("page-6", 6, motion_page)))
                         .when(self.page == 0, |el| el.child(unroll_in("page-0", 0, div().flex().flex_col().gap(space::ROW)
                         .child(buttons)
                         .child(div().flex().flex_row().gap(space::ROW).child(toggles).child(status))

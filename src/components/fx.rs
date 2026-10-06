@@ -19,20 +19,23 @@
 //! | [`tear`] | a system failure (shake is for *input* errors) |
 //! | [`ping`] | a new item: one dither ring steps out from a marker |
 //! | [`power_on_in`] | a window opening — and, opted in, closing |
+//! | [`wipe_in`] | side panels and drawers arriving from an edge |
+//! | [`scan`] | content that just refreshed in place: one line passes over it |
+//! | [`flash`] | "look here": a value that needs attention floods and clears |
+//! | [`cascade_in`] | a list or grid arriving item by item, one frame apart |
 
 use std::hash::Hash;
-use std::time::Duration;
-
 use std::rc::Rc;
+use std::time::Duration;
 
 use gpui::{
     AnyElement, App, ElementId, Hsla, IntoElement, ParentElement, RenderOnce, SharedString, Styled,
-    Window, div, point, px,
+    StyleRefinement, Window, div, point, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::animate::{
-    self, band, develop_level, dissolve_level, interlace, interlace_fields, nudge, ping_ring, power_on,
-    power_on_band, scramble, shake_offset, tear_bands, type_on, unroll,
+    self, Edge, band, develop_level, dissolve_level, flash_level, interlace, interlace_fields, nudge, ping_ring,
+    power_on, power_on_band, scan_line, scramble, shake_offset, stagger, tear_bands, type_on, unroll, wipe,
 };
 use crate::dither::{self, dither};
 use crate::motion;
@@ -100,10 +103,7 @@ pub struct Shake {
 }
 
 pub fn shake(id: impl Into<ElementId>, key: impl Hash, child: impl IntoElement) -> Shake {
-    use std::hash::{DefaultHasher, Hasher};
-    let mut h = DefaultHasher::new();
-    key.hash(&mut h);
-    Shake { id: id.into(), key: h.finish(), child: child.into_any_element() }
+    Shake { id: id.into(), key: key_of(key), child: child.into_any_element() }
 }
 
 impl RenderOnce for Shake {
@@ -123,10 +123,7 @@ pub struct Dissolve {
 }
 
 pub fn dissolve(id: impl Into<ElementId>, key: impl Hash, child: impl IntoElement) -> Dissolve {
-    use std::hash::{DefaultHasher, Hasher};
-    let mut h = DefaultHasher::new();
-    key.hash(&mut h);
-    Dissolve { id: id.into(), key: h.finish(), child: child.into_any_element() }
+    Dissolve { id: id.into(), key: key_of(key), child: child.into_any_element() }
 }
 
 impl RenderOnce for Dissolve {
@@ -195,10 +192,7 @@ pub struct UnrollIn {
 }
 
 pub fn unroll_in(id: impl Into<ElementId>, key: impl Hash, child: impl IntoElement) -> UnrollIn {
-    use std::hash::{DefaultHasher, Hasher};
-    let mut h = DefaultHasher::new();
-    key.hash(&mut h);
-    UnrollIn { id: id.into(), key: h.finish(), child: child.into_any_element(), duration: motion::BASE }
+    UnrollIn { id: id.into(), key: key_of(key), child: child.into_any_element(), duration: motion::BASE }
 }
 
 impl UnrollIn {
@@ -429,4 +423,139 @@ impl RenderOnce for PowerOnIn {
     }
 }
 
-use gpui::prelude::FluentBuilder as _;
+
+/// Wipes its child in from one edge with an amber scan edge when it first
+/// appears and whenever `key` changes — [`unroll_in`] on its side. For
+/// sidebars, drawers and inspector panes.
+#[derive(IntoElement)]
+pub struct WipeIn {
+    id: ElementId,
+    key: u64,
+    child: AnyElement,
+    from: Edge,
+    duration: Duration,
+}
+
+pub fn wipe_in(id: impl Into<ElementId>, key: impl Hash, child: impl IntoElement) -> WipeIn {
+    WipeIn { id: id.into(), key: key_of(key), child: child.into_any_element(), from: Edge::Left, duration: motion::BASE }
+}
+
+impl WipeIn {
+    /// Reveal from the right edge (a drawer on the right).
+    pub fn from_right(mut self) -> Self {
+        self.from = Edge::Right;
+        self
+    }
+
+    pub fn duration(mut self, d: Duration) -> Self {
+        self.duration = d;
+        self
+    }
+}
+
+impl RenderOnce for WipeIn {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = animate::play(self.id, self.key, self.duration, window, cx);
+        wipe(self.child, p.eased(), self.from).edge(hsla(palette(cx).accent))
+    }
+}
+
+/// Passes one amber scan line down over its child whenever `key` changes
+/// (not on first render). Nothing is hidden: the content is already there,
+/// the line just says "refreshed". For reloaded panes, re-run queries,
+/// polled data that arrived as an event.
+#[derive(IntoElement)]
+pub struct Scan {
+    id: ElementId,
+    key: u64,
+    child: AnyElement,
+}
+
+pub fn scan(id: impl Into<ElementId>, key: impl Hash, child: impl IntoElement) -> Scan {
+    Scan { id: id.into(), key: key_of(key), child: child.into_any_element() }
+}
+
+impl RenderOnce for Scan {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = animate::play_on_change(self.id, self.key, motion::SLOW, window, cx);
+        let accent = hsla(palette(cx).accent);
+        div().relative().child(self.child).when_some(scan_line(p), |el, y| {
+            el.child(div().absolute().left_0().right_0().top(relative(y)).h(px(2.)).bg(accent))
+        })
+    }
+}
+
+/// Floods its child with ink and dissolves back through the Bayer ramp
+/// whenever `key` changes (not on first render) — the button's click
+/// acknowledgement, for anything. Capped at ▓ so the content reads through.
+#[derive(IntoElement)]
+pub struct Flash {
+    id: ElementId,
+    key: u64,
+    child: AnyElement,
+    ink: Option<Hsla>,
+}
+
+pub fn flash(id: impl Into<ElementId>, key: impl Hash, child: impl IntoElement) -> Flash {
+    Flash { id: id.into(), key: key_of(key), child: child.into_any_element(), ink: None }
+}
+
+impl Flash {
+    /// Flood color (default: the accent).
+    pub fn ink(mut self, color: Hsla) -> Self {
+        self.ink = Some(color);
+        self
+    }
+}
+
+impl RenderOnce for Flash {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = animate::play_on_change(self.id, self.key, motion::FAST, window, cx);
+        let ink = self.ink.unwrap_or_else(|| hsla(palette(cx).accent));
+        div().relative().child(self.child).when_some(flash_level(p), |el, level| {
+            el.child(div().absolute().inset_0().child(dither(dither::flat(level)).ink(ink).size_full()))
+        })
+    }
+}
+
+/// Lays out its children like a `div` (style it: `.flex().flex_col()`…)
+/// and unrolls each one in a frame after the one before it (capped at
+/// eight frames), when it first appears and whenever `key` changes.
+/// Layout is final from the first frame; only the reveal is staggered.
+#[derive(IntoElement)]
+pub struct CascadeIn {
+    id: ElementId,
+    key: u64,
+    children: Vec<AnyElement>,
+    style: StyleRefinement,
+}
+
+pub fn cascade_in(id: impl Into<ElementId>, key: impl Hash) -> CascadeIn {
+    CascadeIn { id: id.into(), key: key_of(key), children: Vec::new(), style: StyleRefinement::default() }
+}
+
+impl ParentElement for CascadeIn {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for CascadeIn {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for CascadeIn {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let accent = hsla(palette(cx).accent);
+        let mut root = div();
+        *root.style() = self.style;
+        for (i, child) in self.children.into_iter().enumerate() {
+            let id = ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), format!("c{i}").into());
+            let p = animate::play_after(id, self.key, stagger(i), motion::FAST, window, cx);
+            root = root.child(if p.done { child } else { unroll(child, p.eased()).edge(accent).into_any_element() });
+        }
+        root
+    }
+}
