@@ -67,6 +67,10 @@ Combine templates; every piece below is a component in the prelude.
   response headers, a read-only `virtual_list` body, `stat` for timing.
 - **System monitor** — `dashboard` with `meter`s per core, `line_chart`
   per resource, a process `table`, `heatmap` of load by hour.
+- **Retro / terminal-styled tool** (a BBS client, a hardware monitor, a
+  game launcher) — `minimal` or `console`, framed with `ascii_box` instead
+  of `panel`, a `banner` title, `ascii_gauge`s for readouts, `ascii_art`
+  for a splash, and `motion::set_fps(25)` for the stepped look.
 - **Kanban / tracker** — `explorer` data + columns of `panel`s with
   `list_item` cards; `steps` or `tag`s for status; `drawer` for details.
 
@@ -226,6 +230,11 @@ skeleton(id).h(px(64.)).w_full()    skeleton_text(id, 3, px(10.))    empty_state
 line_chart(id, values).title("Latency").compare(baseline).labels(labels).format(|v| format!("{v:.0}MS")).height(px(180.))
 bar_chart(id).bars([("Mon", 12.), ("Tue", 19.)]).highlight(Some(1))
 sparkline(values).size(px(120.), px(20.))      heatmap(rows_0_to_1).row_labels(["Mon", "Tue"])
+
+// Text mode (ASCII) — one framing style per screen: these, or panel()
+ascii_box().title("System").double().ink(hsla(p.accent)).child(..)    ascii_rule(Some("logs")).double()
+banner(id, "FERRITE")    ascii_art(picture).cols(48).ramp(&ascii::BUBBLES)    ascii_gauge(0.42).label("cpu").cells(12)
+spinner(id).frames(ascii::spinners::DOTS)    mark()    ascii::gauge(0.4, 10)  ascii::box_edge(ascii::SINGLE, 20, true, Some("t"))
 
 // Framing, type, color
 panel("Title").meta("12 items").flex_1().child(..)    rule(Some("section"), window, cx)

@@ -19,6 +19,8 @@ use ferrite_design::{
         calendar, cascade_in, date_picker, drawer, event, field, flash, heatmap, line_chart, number_input, pagination,
         property_list, scan, select, sidebar, skeleton, skeleton_text, sparkline, stat, steps, timeline, toolbar, wipe_in, afterglow, column, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
     },
+    ascii,
+    components::{ascii_art, ascii_box, ascii_gauge, ascii_rule, banner},
     dither::{self, dither},
     icon::icon,
     motion, palette, theme,
@@ -39,7 +41,7 @@ const FILES: [(Icon, &str, &str); 5] = [
 ];
 const PROCS: [(&str, &str); 4] = [("ferrite-atlas", "pid 4412"), ("cargo", "pid 9021"), ("rust-analyzer", "pid 3310"), ("showcase", "pid 7777")];
 const MODES: [&str; 3] = ["Fast", "Balanced", "Thorough"];
-const PAGES: [&str; 7] = ["Controls", "Forms", "Data & input", "Navigation", "Charts", "Layout", "Motion"];
+const PAGES: [&str; 8] = ["Controls", "Forms", "Data & input", "Navigation", "Charts", "ASCII", "Layout", "Motion"];
 const REGIONS: [&str; 4] = ["eu-west-1", "us-east-1", "ap-south-1", "sa-east-1"];
 const LOG_LINES: usize = 10_000;
 const PROC_TABLE: [(&str, u32, f32, u32, &str); 6] = [
@@ -1240,6 +1242,70 @@ impl Components {
             .child(details)
     }
 
+
+    fn ascii_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let p = palette(cx);
+        let replay = self.replay[22];
+        let note = |t: &'static str| div().body(text::SM).text_color(hsla(p.fg_dim)).child(t);
+        let system = ascii_box()
+            .title("System")
+            .flex_1()
+            .child(ascii_gauge(self.load(1)).label("cpu"))
+            .child(ascii_gauge(self.load(2) * 0.8).label("mem"))
+            .child(ascii_gauge(self.load(3) * 0.55).label("disk"))
+            .child(ascii_gauge(0.97).label("swap"));
+        let spin = |id: &'static str, frames: &'static [&'static str], label: &'static str| {
+            div().flex().flex_row().items_center().gap_3()
+                .child(div().w(px(48.)).child(spinner(id).frames(frames).color(hsla(p.accent))))
+                .child(div().body(text::SM).text_color(hsla(p.fg_dim)).child(label))
+        };
+        let boot = ascii_box()
+            .title("Boot")
+            .double()
+            .ink(hsla(p.accent))
+            .flex_1()
+            .child(div().display(Scale::X1, window).child(typewriter(("boot-line", replay as usize), "C:\\FERRITE> RUN ATLAS.EXE")))
+            .child(spin("sp-line", ascii::spinners::LINE, "line"))
+            .child(spin("sp-shade", ascii::spinners::SHADE, "shade"))
+            .child(spin("sp-dots", ascii::spinners::DOTS, "dots"))
+            .child(spin("sp-pulse", ascii::spinners::PULSE, "pulse"))
+            .child(spin("sp-bounce", ascii::spinners::BOUNCE, "bounce"));
+        let title = ascii_box()
+            .child(div().flex().flex_row().items_center().justify_between()
+                .child(banner(("banner", replay as usize), "FERRITE"))
+                .child(Button::new("banner-replay").label("Replay").icon(Icon::Refresh).small().ghost().on_click(cx.listener(|this, _, _, cx| {
+                    this.replay[22] += 1;
+                    cx.notify();
+                }))))
+            .child(note("banner(): the built-in 5×5 block font, one pixel = half a cell — A–Z, 0–9, - . ! ? : / _"));
+        let art = div()
+            .flex()
+            .flex_row()
+            .gap(space::ROW)
+            .child(ascii_box().title("ascii_art · classic").flex_1().child(ascii_art(self.orb.clone()).cols(54).color(hsla(p.accent_text))))
+            .child(ascii_box().title("ascii_art · bubbles").flex_1().child(ascii_art(self.orb.clone()).cols(54).ramp(&ascii::BUBBLES)));
+        div()
+            .flex()
+            .flex_col()
+            .gap(space::ROW)
+            .child(note("Text-mode elements, drawn with the pixel font's own box glyphs on its cell grid. One framing style per screen: these for a terminal feel, panel() for everyday UI."))
+            .child(title)
+            .child(div().flex().flex_row().gap(space::ROW).child(system).child(boot))
+            .child(ascii_rule(Some("rules")))
+            .child(ascii_rule(None).double())
+            .child(art)
+            .child(
+                ascii_box().title("strings").child(
+                    div().flex().flex_col().gap_1()
+                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(ascii::box_edge(ascii::DOUBLE, 30, true, Some("box_edge"))))
+                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(ascii::gauge(0.42, 16)))
+                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(ascii::rule("rule", 30)))
+                        .child(div().body(text::BASE).text_color(hsla(p.accent_text)).child(ascii::sparkline(&[1., 3., 2., 5., 8., 6., 9., 4., 7., 10., 6., 3.])))
+                        .child(note("The ascii module returns strings too, for anything you compose yourself (sparkline is body-face: the pixel font lacks eighth blocks).")),
+                ),
+            )
+    }
+
     fn charts_page(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
         let p = palette(cx);
         let seed = self.series_seed;
@@ -1679,6 +1745,7 @@ impl Render for Components {
         let forms_page = self.forms_page(window, cx);
         let nav_page = self.nav_page(window, cx);
         let charts_page = self.charts_page(window, cx);
+        let ascii_page = self.ascii_page(window, cx);
         let data_page = self.data_page(window, cx);
         let layout_page = self.layout_page(window, cx);
         let motion_page = self.motion_page(window, cx);
@@ -1721,6 +1788,7 @@ impl Render for Components {
                                 .tab(PAGES[4])
                                 .tab(PAGES[5])
                                 .tab(PAGES[6])
+                                .tab(PAGES[7])
                                 .selected(self.page)
                                 .on_select({
                                     let this = cx.weak_entity();
@@ -1737,8 +1805,9 @@ impl Render for Components {
                         .when(self.page == 2, |el| el.child(unroll_in("page-2", 2, data_page)))
                         .when(self.page == 3, |el| el.child(unroll_in("page-3", 3, nav_page)))
                         .when(self.page == 4, |el| el.child(unroll_in("page-4", 4, charts_page)))
-                        .when(self.page == 5, |el| el.child(unroll_in("page-5", 5, layout_page)))
-                        .when(self.page == 6, |el| el.child(unroll_in("page-6", 6, motion_page)))
+                        .when(self.page == 5, |el| el.child(unroll_in("page-5", 5, ascii_page)))
+                        .when(self.page == 6, |el| el.child(unroll_in("page-6", 6, layout_page)))
+                        .when(self.page == 7, |el| el.child(unroll_in("page-7", 7, motion_page)))
                         .when(self.page == 0, |el| el.child(unroll_in("page-0", 0, div().flex().flex_col().gap(space::ROW)
                         .child(buttons)
                         .child(div().flex().flex_row().gap(space::ROW).child(toggles).child(status))

@@ -77,18 +77,29 @@ impl RenderOnce for Cursor {
 
 // ── Spinner ───────────────────────────────────────────────────────────────
 
-/// The text-mode `| / - \` spinner. Static `|` under reduced motion.
+/// A text-mode spinner: `| / - \` by default, or any frame set from
+/// `ascii::spinners`. Shows its first frame under reduced motion.
 #[derive(IntoElement)]
 pub struct Spinner {
     id: ElementId,
     color: Option<Hsla>,
+    frames: &'static [&'static str],
 }
 
 pub fn spinner(id: impl Into<ElementId>) -> Spinner {
-    Spinner { id: id.into(), color: None }
+    Spinner { id: id.into(), color: None, frames: ascii::spinners::LINE }
 }
 
 impl Spinner {
+    /// Frame set (default `ascii::spinners::LINE`, `| / - \`): also
+    /// `SHADE`, `DOTS`, `PULSE`, `BOUNCE`.
+    pub fn frames(mut self, frames: &'static [&'static str]) -> Self {
+        if !frames.is_empty() {
+            self.frames = frames;
+        }
+        self
+    }
+
     /// Ink color (default: `fg_dim`).
     pub fn color(mut self, color: Hsla) -> Self {
         self.color = Some(color);
@@ -103,6 +114,7 @@ impl RenderOnce for Spinner {
         div()
             .display(Scale::X1, window)
             .text_color(self.color.unwrap_or_else(|| hsla(p.fg_dim)))
-            .child(ascii::SPINNER[n as usize % ascii::SPINNER.len()].to_string())
+            .whitespace_nowrap()
+            .child(self.frames[n as usize % self.frames.len()])
     }
 }

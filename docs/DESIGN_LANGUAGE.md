@@ -234,13 +234,41 @@ would reach for those, Ferrite uses **4×4 ordered (Bayer) dither** or a
 | empty states, loading placeholders | as a full-window background behind content |
 | large content-free regions | more than one dither density in one small area |
 
-### 5.3 ASCII (`src/ascii.rs`)
+### 5.3 ASCII and text mode
 
-`bar`, `spinner`, `sparkline`, `shade`, `bracket`, `rule` and the box-drawing
-set. They return strings, so they compose with any element; mind which face
-renders them (§3.2).
+The other half of the texture: the machine drawing with its own character
+set. Two layers:
 
----
+- **Strings** (`src/ascii.rs`): `bar`, `gauge`, `spinner` frame sets,
+  `sparkline`, `shade`, `bracket`, `rule`, `box_edge`, the 5×5
+  `block_glyph` font and `art` (any level function → ASCII art). They
+  compose with any element; mind which face renders them (§3.2).
+- **Elements** (`components::textmode`), drawn on the display face's cell
+  grid:
+
+  | Element | What it is | Use it for |
+  |---|---|---|
+  | `ascii_box()` | a frame of real box glyphs, `┌─[ TITLE ]─┐` or `╔═╗` (`.double()`), any size | terminal-feel blocks: system status, boot screens, about boxes, a retro mode |
+  | `ascii_rule(label)` | `── LABEL ─────` across the width (`.double()`) | dividers inside text-mode screens |
+  | `banner(id, text)` | big 5×5 block letters, drawn on with a wipe | title screens, splash, empty states |
+  | `ascii_art(picture)` | a grayscale `Picture` as characters (` .:-=+*#%@`, any ramp) | hero art, about boxes, loading art |
+  | `ascii_gauge(v)` | `CPU [████▒·····]  42%` | dense live readouts; never animates |
+  | `spinner(..).frames(ascii::spinners::X)` | `LINE` `SHADE` `DOTS` `PULSE` `BOUNCE` | busy states |
+  | `mark()` | the `▓▒░` mark, as real dither | the title bar, sidebars, splash |
+
+Rules:
+
+- **One framing style per screen.** `panel()` (hairlines + dither header)
+  for everyday UI; `ascii_box` for screens that want to *be* a terminal.
+  Mixing them on one screen looks like two apps.
+- **Dense block glyphs are painted, not typeset.** `█ ▀ ▄ ▓ ▒ ░` as text get
+  fringed and seamed by subpixel anti-aliasing (PITFALLS §47), so the
+  banner, the gauge fill and the mark are quads and dither. Thin glyphs —
+  box lines, letters, punctuation — are text.
+- ASCII art uses printable ASCII only; for shaded pictures use
+  `dither(picture)`, which is the same idea done crisply.
+
+![Text-mode elements](img/components-ascii.png)
 
 ## 6. Motion
 

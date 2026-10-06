@@ -81,6 +81,18 @@ with a scheme picker), and whole apps built from them in `examples/app_*.rs`.
 | **`sparkline`** | `chart` | inline bars, the latest in amber |
 | **`heatmap`** | `chart` | grid whose dither *density* is the value; row labels; `LESS ░▒▓█ MORE` legend |
 
+### Text mode (ASCII)
+
+| Component | Module | Notes |
+|---|---|---|
+| **`ascii_box`** | `textmode` | real box-glyph frame, single or `.double()`, title in the edge, any size (edges clipped to the box) |
+| **`ascii_rule`** | `textmode` | `── LABEL ───` across the width |
+| **`banner`** | `textmode` | 5×5 block letters as quads, wiped on |
+| **`ascii_art`** | `textmode` | a `Picture` as characters, any ramp (`ascii::CLASSIC`, `BUBBLES`) |
+| **`ascii_gauge`** | `textmode` | `[████▒·····] 42%`; live-data safe |
+| **`mark`** | `textmode` | the `▓▒░` mark as real dither |
+| `spinner(..).frames(..)` | `ticker` | `ascii::spinners::{LINE, SHADE, DOTS, PULSE, BOUNCE}` |
+
 ### Layout and framing
 
 | Component | Module | Notes |

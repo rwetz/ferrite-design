@@ -142,7 +142,7 @@ impl RenderOnce for Sidebar {
                     .border_b_1()
                     .border_color(hsla(p.line))
                     .display(Scale::X1, window)
-                    .child(div().text_color(hsla(p.accent)).child("▓▒░"))
+                    .child(super::textmode::mark())
                     .when(!collapsed, |el| el.child(div().text_color(hsla(p.fg)).child(brand.to_uppercase()))),
             );
         }

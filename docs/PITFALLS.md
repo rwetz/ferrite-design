@@ -459,3 +459,14 @@ values through the non-animating variants (`StatusBar::left_live` /
 `right_live`, a plain `div`), and keep the animated ones for values that
 change as events (DESIGN_LANGUAGE §6.3).
 
+## 47. Dense block glyphs fringe under subpixel text AA — ✅ handled
+
+gpui's Linux text path anti-aliases with subpixel (LCD) coverage. On thin
+strokes that's invisible; on the shade and block glyphs (`░ ▒ ▓ █ ▀ ▄`)
+every 1px checker becomes a red/blue/green fringe and adjacent `█` cells
+show colored seams. The title bar's own `▓▒░` mark was affected on Linux.
+Anything dense is now painted instead of typeset: the mark is dither
+(`components::mark`), the banner and the gauge fill are quads. Keep block
+glyphs out of text you render yourself; use `dither(..)` or quads. Thin
+box-drawing glyphs and ASCII are fine.
+
