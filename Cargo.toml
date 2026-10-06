@@ -1,0 +1,32 @@
+[package]
+name = "ferrite-design"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+authors = ["Ryan Wetzstein"]
+description = "The design language for Ferrite-family GPUI apps: amber-on-iron tokens, pixel display type, ordered-dither and ASCII primitives, square window chrome."
+repository = "https://github.com/rwetz/ferrite-design"
+keywords = ["gpui", "design-system", "dither", "ascii", "ui"]
+categories = ["gui"]
+
+[dependencies]
+# gpui-component pins its gpui; we must name the exact same one or the two
+# crates see two different `App` types. Bump both together.
+gpui = { package = "gpui-pre", version = "=0.3.8" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
+gpui-component = "=0.7.1"
+serde_json = "1"
+anyhow = "1"
+raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Same major as gpui's own windows dependency; used only to opt out of
+# Windows 11's forced rounded corners (see chrome::square_corners).
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
+
+[[example]]
+name = "showcase"
+
+[[example]]
+name = "minimal"

@@ -1,0 +1,133 @@
+# Scaffolding a New Ferrite App
+
+> Stand up a fresh GPUI desktop app on `ferrite-design`. The showcase
+> (`examples/showcase.rs`) is a complete working reference — when in doubt,
+> copy from it. Keep [PITFALLS.md](PITFALLS.md) open.
+
+Placeholders: **`ferrite-myapp`** (crate / repo name), **`My App`** (display
+name). Ferrite apps are named `ferrite-<thing>`, as Nexis apps are
+`nexis-<thing>`.
+
+---
+
+## Step 0 — Prerequisites
+
+- Rust stable (edition 2024; rustc ≥ 1.88).
+- **Windows:** MSVC build tools.
+- **Linux:** the usual gpui system deps (`libxkbcommon`, `wayland`, `vulkan`
+  loader, `fontconfig`).
+- **macOS:** Xcode command-line tools (Metal).
+
+## Step 1 — Create the crate
+
+```bash
+cargo new ferrite-myapp
+cd ferrite-myapp
+```
+
+## Step 2 — Dependencies
+
+```toml
+[dependencies]
+ferrite-design = { git = "https://github.com/rwetz/ferrite-design" }
+# Must match ferrite-design exactly — see PITFALLS §1.
+gpui = { package = "gpui-pre", version = "=0.3.8" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
+gpui-component = "=0.7.1"
+```
+
+There is no publish step: consume it from git, as `@nexis/design` is. Pin a
+`rev` once the app ships.
+
+## Step 3 — `main.rs`
+
+This is `examples/minimal.rs` verbatim (`cargo test` compiles it, so it
+cannot rot):
+
+```rust
+use ferrite_design::{Appearance, chrome, components::status_bar, palette, tokens::hsla};
+use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
+           Subscription, Window, div, px, size};
+use gpui_component::Root;
+
+struct MyApp {
+    _appearance: Subscription,
+}
+
+impl Render for MyApp {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        div()
+            .flex().flex_col().size_full()
+            .bg(hsla(p.bg)).text_color(hsla(p.fg))
+            .child(chrome::title_bar("My App"))
+            .child(div().flex_1().min_h_0() /* your content */)
+            .child(status_bar().left("READY"))
+    }
+}
+
+fn main() {
+    gpui_platform::application().run(|cx: &mut App| {
+        // 1. Theme + fonts BEFORE any window (no first-frame flash).
+        ferrite_design::init(Appearance::Dark, cx);
+
+        // 2. Every window starts from chrome::window_options.
+        let options = chrome::window_options("My App", size(px(1200.), px(800.)), cx);
+        cx.open_window(options, |window, cx| {
+            // 3. Square corners on Windows 11.
+            chrome::square_corners(window);
+            let view = cx.new(|_| MyApp { _appearance: ferrite_design::theme::follow_system(window) });
+            // 4. gpui-component's Root hosts dialogs, notifications, etc.
+            cx.new(|cx| Root::new(view, window, cx))
+        })
+        .unwrap();
+        cx.activate(true);
+    });
+}
+```
+
+## Step 4 — Structure
+
+Mirror the Nexis module pattern:
+
+```
+ferrite-myapp/
+├─ Cargo.toml
+├─ src/
+│  ├─ main.rs            # init → open_window, nothing else
+│  ├─ app.rs             # root view: title bar, workspace, status bar
+│  └─ modules/<feature>/ # one folder per feature: view(s) + state + mod.rs
+└─ assets/               # app icon source, app-specific assets
+```
+
+## Step 5 — Build with the language
+
+- Frame regions with `components::panel("Name")`, not bare bordered divs.
+- Display labels: `.display(Scale::X1, window)`, UPPERCASE.
+- Body: `.body(text::BASE)`; it's already the theme default for widgets.
+- Texture: `dither(..)` only in the places DESIGN_LANGUAGE §5.2 allows.
+- Motion: `motion::*` only; check `motion::reduced(cx)`.
+- Widgets: gpui-component for now — check COMPONENTS.md for a native
+  replacement first.
+
+## Step 6 — Run
+
+```bash
+cargo run
+FERRITE_APPEARANCE=light cargo run --example showcase   # compare against the reference
+```
+
+---
+
+## Definition of done
+
+- [ ] First frame is Ferrite (no flash of the library's light theme).
+- [ ] Square corners on Windows 11; native traffic lights on macOS.
+- [ ] Linux: no doubled window controls under server-side decorations.
+- [ ] Window controls work; maximize shows Snap Layouts on Windows.
+- [ ] Display type is crisp at 100%, 125% and 150% scale.
+- [ ] Dither is crisp (no grey mush) at fractional scale.
+- [ ] Paper mode is legible everywhere; the amber accent is used only for
+      primary action / active / focus / progress.
+- [ ] Reduced-motion OS setting stops blinks and tickers.
+- [ ] `cargo test` passes in `ferrite-design` at the pinned rev.

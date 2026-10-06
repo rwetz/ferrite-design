@@ -1,0 +1,135 @@
+# Pitfalls — field notes from the first scaffold
+
+> Each entry bit for real while standing up `ferrite-design` and its showcase
+> (2026-10-05, Windows 11, 150% scale, gpui-pre 0.3.8, gpui-component 0.7.1).
+> Read before SCAFFOLDING.md. Where the crate already handles it, the entry
+> says so — keep it here so nobody "simplifies" the fix away.
+
+---
+
+## 1. gpui must be the exact build gpui-component was compiled against
+
+gpui-component 0.7.1 depends on `gpui = { package = "gpui-pre", version =
+"=0.3.8" }`. If an app depends on any other gpui (the `gpui` crate on
+crates.io, a Zed git rev, a newer `gpui-pre`), it gets **two copies of gpui**
+and every API boundary fails with baffling "expected `App`, found `App`"
+errors.
+
+**Fix:** name the same package and version, and bump them together:
+
+```toml
+gpui = { package = "gpui-pre", version = "=0.3.8" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
+gpui-component = "=0.7.1"
+```
+
+## 2. There is no `Application::new()` — the platform is a separate crate
+
+This gpui snapshot moved platform backends out of `gpui`. Apps start with
+`gpui_platform::application().run(..)`, from `gpui-pre-platform`. Older
+examples and blog posts showing `Application::new()` / `App::new()` will not
+compile.
+
+## 3. Theme colors written to the live theme get wiped on mode change — ✅ handled
+
+gpui-component reloads the active mode's `ThemeConfig` on every light/dark
+switch, overwriting anything set directly on `Theme::global_mut(cx)`.
+
+**Fix (in `theme::install`):** build a full `ThemeConfig` per palette and
+install both as `light_theme` / `dark_theme`; then mode changes keep Ferrite.
+
+## 4. Renamed theme keys fail silently — ✅ tripwire
+
+gpui-component's theme schema is deserialised with serde, which ignores
+unknown keys. A key renamed in a library bump makes that widget quietly fall
+back to the library default (shadcn neutral/blue), with no error.
+
+**Tripwire:** `theme::tests::every_color_key_survives_the_round_trip`
+serialises the parsed config back and fails if any key we sent was dropped.
+Run `cargo test` after every gpui-component bump.
+
+## 5. The theme `json!` literal needs a raised recursion limit — ✅ handled
+
+The full config is one `serde_json::json!` literal and exceeds the default
+macro recursion limit. `lib.rs` sets `#![recursion_limit = "512"]`.
+
+## 6. Pixel fonts blur at fractional scale — ✅ handled by `display_size`
+
+At 125%/150% a 16px pixel font lands on 20/24 device px and smears. Always set
+display type through `.display(Scale, window)`; never `.text_size()` on the
+display face. Consequence to accept: at 125% display type renders *smaller*
+than requested, at 150% *larger*. That is the price of crisp.
+
+## 7. Dither drawn in logical pixels turns to grey mush — ✅ handled
+
+A 1-logical-px checkerboard at 150% covers 1.5 device px per cell and
+averages to flat grey. `Dither` sizes cells in **device** pixels and snaps the
+grid origin to the device. Don't hand-roll dither with logical sizes.
+
+## 8. Windows 11 rounds every window's corners — ✅ handled
+
+DWM rounds top-level windows regardless of what the app paints, which breaks
+the 0px rule. `chrome::square_corners(window)` sets
+`DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND`. It must be called per
+window, from the `open_window` closure. Harmless on Windows 10.
+
+## 9. `window.window_handle()` is not the raw OS handle
+
+gpui's `Window` has an *inherent* `window_handle()` returning gpui's own
+`AnyWindowHandle`, which shadows the `raw_window_handle::HasWindowHandle`
+trait method. To get the HWND, call the trait explicitly:
+`HasWindowHandle::window_handle(window)`.
+
+## 10. Windows title-bar controls must not have click handlers
+
+On Windows the min/max/close buttons work by declaring
+`.window_control_area(WindowControlArea::Min | Max | Close)`; the OS hit-tests
+them. Adding `on_click` handlers instead *works* but loses Snap Layouts on
+the maximize button. Linux is the opposite: there are no OS control areas, so
+the buttons need click handlers. `chrome::TitleBar` does both, per platform.
+
+## 11. Linux may refuse client decorations → doubled controls — ✅ handled
+
+`WindowDecorations::Client` is a request. X11 without a compositor, and some
+Wayland compositors, grant server-side decorations anyway, and drawing our own
+controls on top gives two close buttons. `TitleBar` checks
+`window.window_decorations()` and draws no controls unless client-decorated,
+and honours `window.window_controls()` (tiling WMs may offer neither minimize
+nor maximize).
+
+## 12. macOS: let the app own title-bar dragging — ✅ handled
+
+Without `app_owns_titlebar_drag: true`, AppKit treats the transparent title
+bar as a system drag region, handles double-clicks itself *and* delays every
+title-bar click while it waits to see if it's a double-click.
+`chrome::window_options` sets it; `TitleBar` starts the move on the first
+mouse-move after a press (not on press, so children stay clickable).
+
+## 13. Install the theme before opening the window — ✅ in `init`
+
+gpui-component's `init` installs its own default theme (light). A window
+opened before `ferrite_design::init` paints at least one frame of it — the
+GPUI equivalent of the Nexis theme flash. Order is always:
+`ferrite_design::init(..)` → `cx.open_window(..)`.
+
+## 14. Linux resize edges and `window_border` (open)
+
+With client decorations on Linux the app must provide resize edges.
+gpui-component's `window_border()` does, but rounds some corners with its own
+radius, which conflicts with 0px. Not yet replaced — see COMPONENTS.md. Until
+then, Linux apps either accept that or skip `window_border` and lose edge
+resizing.
+
+## 15. Windows: top 1–2px may show what's behind the window (unverified)
+
+Screenshots of the showcase on Windows 11 at 150% showed the desktop through
+the top 1–2 device pixels of the window, likely the resize border gpui keeps
+on a transparent-titlebar window. Not yet confirmed by eye or fixed. Check
+before shipping an app that paints content right up to the top edge.
+
+## 16. Testing note: screenshotting/scrolling at fractional scale
+
+When driving the app from a script (PowerShell, AutoHotkey…) for screenshots,
+the script process must be DPI-aware (`SetProcessDPIAware`) or cursor
+coordinates are scaled and synthetic wheel events land outside the window —
+which looks exactly like "scrolling is broken" when it isn't.
