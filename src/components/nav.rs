@@ -186,7 +186,7 @@ impl RenderOnce for Sidebar {
                             .flex_row()
                             .items_center()
                             .gap_2()
-                            .h(px(30.))
+                            .h(crate::theme::row_height(cx) + px(2.))
                             .map(|el| if collapsed { el.justify_center() } else { el.pl(px(12.)).pr_2() })
                             .border_1()
                             .border_color(gpui::transparent_black())

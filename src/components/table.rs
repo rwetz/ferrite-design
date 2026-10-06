@@ -23,7 +23,7 @@ use std::rc::Rc;
 use gpui::{
     App, ElementId, FocusHandle, InteractiveElement, IntoElement, MouseButton, ParentElement,
     Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    prelude::FluentBuilder as _,
 };
 
 use crate::fonts::{FerriteText, Scale};
@@ -157,7 +157,6 @@ fn key_row(key: &str, selected: Option<usize>, len: usize) -> Option<usize> {
     })
 }
 
-const ROW: Pixels = px(28.);
 
 impl RenderOnce for Table {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -185,7 +184,7 @@ impl RenderOnce for Table {
             .flex()
             .flex_row()
             .items_center()
-            .h(ROW)
+            .h(crate::theme::row_height(cx))
             .bg(hsla(p.surface))
             .border_b_1()
             .border_color(hsla(p.line_strong));
@@ -229,7 +228,7 @@ impl RenderOnce for Table {
                 .flex()
                 .flex_row()
                 .items_center()
-                .h(ROW)
+                .h(crate::theme::row_height(cx))
                 .border_b_1()
                 .border_color(hsla(p.line))
                 .body(text::BASE)

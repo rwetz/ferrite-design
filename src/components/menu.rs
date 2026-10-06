@@ -338,12 +338,12 @@ fn key_outcome(root: &[Entry], path: &[Option<usize>], key: &str) -> KeyOutcome 
 }
 
 /// Row heights, so a submenu's first row can line up with its parent row.
-const ROW: Pixels = px(28.);
+/// Item rows follow `theme::row_height`.
 const SEPARATOR: Pixels = px(9.); // 1px line + 4px margin each side
 
-fn entry_height(entry: &Entry, label: Pixels) -> Pixels {
+fn entry_height(entry: &Entry, label: Pixels, row: Pixels) -> Pixels {
     match entry {
-        Entry::Item(_) | Entry::Submenu(_) => ROW,
+        Entry::Item(_) | Entry::Submenu(_) => row,
         Entry::Separator => SEPARATOR,
         Entry::Label(_) => label,
     }
@@ -457,7 +457,7 @@ fn render_level(
                     .flex_row()
                     .items_center()
                     .gap_2()
-                    .h(ROW)
+                    .h(crate::theme::row_height(cx))
                     .px_3()
                     .body(text::BASE)
                     .text_color(hsla(ink))
@@ -589,7 +589,7 @@ impl RenderOnce for Menu {
             if level > 0 {
                 let parent = level_entries(&entries, &path, level - 1).unwrap_or_default();
                 let row = path[level - 1].unwrap_or(0);
-                top += parent[..row].iter().map(|e| entry_height(e, label_h)).fold(px(0.), |a, b| a + b);
+                top += parent[..row].iter().map(|e| entry_height(e, label_h, crate::theme::row_height(cx))).fold(px(0.), |a, b| a + b);
             }
             levels.push(div().mt(top).child(render_level(level_items, level, &path, self.width, &state, window, cx)));
         }

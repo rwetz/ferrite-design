@@ -89,7 +89,7 @@ impl RenderOnce for ListItem {
             .flex_row()
             .items_center()
             .gap_2()
-            .h(px(28.))
+            .h(crate::theme::row_height(cx))
             .pl(px(12.))
             .pr_2()
             .body(text::BASE)

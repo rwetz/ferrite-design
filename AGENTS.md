@@ -254,6 +254,7 @@ boot_screen("boot", root).title("Console")   // inside power_on_in: a POST at la
 // Schemes and appearance
 theme::set_scheme(&SCHEMES[i], cx)   schemes::by_key("mono")   theme::set_appearance(Appearance::Light, window, cx)
 motion::set_fps(25)                  // the classic stepped look; default 240
+theme::set_density(Density::Compact, cx)   // row heights: Compact 24 · Cozy 28 (default) · Roomy 36; theme::row_height(cx) for your own rows
 ```
 
 Icons: `Plus Minus Close Check Play Stop Pause Refresh Search Up Down ChevronUp

@@ -25,7 +25,7 @@ use std::rc::Rc;
 
 use gpui::{
     App, ElementId, FocusHandle, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement, Styled, Window, div,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
 };
 
@@ -189,7 +189,6 @@ fn key_outcome(rows: &[Flat], selected: Option<&SharedString>, expanded: &HashSe
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
-const ROW: Pixels = px(28.);
 
 struct TreeState {
     focus: FocusHandle,
@@ -248,8 +247,8 @@ impl RenderOnce for Tree {
                         .w(indent)
                         .h_full()
                         // ├ or └: the vertical runs to the middle, and on if siblings follow.
-                        .child(div().absolute().left(mid).top_0().w(px(1.)).h(if row.last { ROW / 2. } else { ROW }).bg(guide))
-                        .child(div().absolute().left(mid).right_0().top(ROW / 2.).h(px(1.)).bg(guide)),
+                        .child(div().absolute().left(mid).top_0().w(px(1.)).h(if row.last { crate::theme::row_height(cx) / 2. } else { crate::theme::row_height(cx) }).bg(guide))
+                        .child(div().absolute().left(mid).right_0().top(crate::theme::row_height(cx) / 2.).h(px(1.)).bg(guide)),
                 );
             }
 
@@ -267,7 +266,7 @@ impl RenderOnce for Tree {
                     .flex()
                     .flex_row()
                     .items_center()
-                    .h(ROW)
+                    .h(crate::theme::row_height(cx))
                     .pl_2()
                     .pr_3()
                     .children(super::selection(format!("{}-{}", self.id, node.id), active, window, cx))

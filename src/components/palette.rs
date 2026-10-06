@@ -358,7 +358,7 @@ impl Render for CommandPalette {
                         .flex_row()
                         .items_center()
                         .gap_2()
-                        .h(px(28.))
+                        .h(crate::theme::row_height(cx))
                         .px_3()
                         .body(text::BASE)
                         .text_color(hsla(p.fg))

@@ -131,7 +131,7 @@ impl RenderOnce for Accordion {
                 .flex_row()
                 .items_center()
                 .gap_2()
-                .h(px(32.))
+                .h(crate::theme::row_height(cx) + px(4.))
                 .px_2()
                 .bg(hsla(if open { p.surface } else { p.bg }))
                 .when(i > 0, |el| el.border_t_1())

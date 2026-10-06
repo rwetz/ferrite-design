@@ -107,7 +107,6 @@ struct Components {
     only_mine: bool,
     compact: bool,
     page: usize,
-    density: usize,
     volume: f32,
     gamma: f32,
     tree_sel: Option<SharedString>,
@@ -201,7 +200,6 @@ impl Components {
             only_mine: false,
             compact: false,
             page: 0,
-            density: 1,
             volume: 65.,
             gamma: 1.0,
             tree_sel: Some("src/components/menu.rs".into()),
@@ -754,15 +752,13 @@ impl Components {
                             .option("Compact")
                             .option("Cozy")
                             .option("Roomy")
-                            .selected(self.density)
+                            .selected(theme::density(cx).index())
                             .on_select({
                                 let this = this.clone();
                                 move |i, _, cx| {
-                                    let i = *i;
-                                    let _ = this.update(cx, |v, cx| {
-                                        v.density = i;
-                                        v.log(format!("DENSITY {}", ["COMPACT", "COZY", "ROOMY"][i]), cx);
-                                    });
+                                    let d = theme::Density::ALL[*i];
+                                    theme::set_density(d, cx);
+                                    let _ = this.update(cx, |v, cx| v.log(format!("DENSITY {}", d.label().to_uppercase()), cx));
                                 }
                             }),
                     ),
@@ -1091,7 +1087,7 @@ impl Components {
                 )
                 .section(
                     accordion_section("Appearance").meta("2").child(
-                        segmented("acc-density").option("Compact").option("Cozy").option("Roomy").selected(self.density).on_select(Self::upd(cx, |c, i: &usize| c.density = *i)),
+                        segmented("acc-density").option("Compact").option("Cozy").option("Roomy").selected(theme::density(cx).index()).on_select(|i, _, cx| theme::set_density(theme::Density::ALL[*i], cx)),
                     ),
                 )
                 .section(

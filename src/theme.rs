@@ -8,7 +8,7 @@
 //! either refreshes every window. There is no second theme system to keep in
 //! sync and nothing that can fall back to someone else's default colors.
 
-use gpui::{App, Global, Subscription, Window, WindowAppearance};
+use gpui::{App, Global, Pixels, Subscription, Window, WindowAppearance, px};
 
 use crate::schemes::{FERRITE, Scheme};
 use crate::tokens::{Palette, Tone};
@@ -32,6 +32,68 @@ impl Global for ActiveTone {}
 
 struct ActiveScheme(&'static Scheme);
 impl Global for ActiveScheme {}
+
+/// How tightly repeated rows pack: list items, table and tree rows, menu
+/// and palette rows, sidebar items, property lists, accordion headers.
+/// Controls (buttons, inputs, selects) keep their size; only rows that
+/// repeat change, which is where density pays off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Density {
+    /// 24px rows: more on screen, for dense data.
+    Compact,
+    /// 28px rows: the default.
+    #[default]
+    Cozy,
+    /// 36px rows: easier targets, calmer lists.
+    Roomy,
+}
+
+impl Density {
+    pub const ALL: [Density; 3] = [Density::Compact, Density::Cozy, Density::Roomy];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Density::Compact => "Compact",
+            Density::Cozy => "Cozy",
+            Density::Roomy => "Roomy",
+        }
+    }
+
+    /// Position in [`Density::ALL`] (for a segmented control).
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The height of one repeated row.
+    pub fn row(self) -> Pixels {
+        match self {
+            Density::Compact => px(24.),
+            Density::Cozy => px(28.),
+            Density::Roomy => px(36.),
+        }
+    }
+}
+
+struct ActiveDensity(Density);
+impl Global for ActiveDensity {}
+
+/// Change row density; every window re-lays out.
+pub fn set_density(density: Density, cx: &mut App) {
+    cx.set_global(ActiveDensity(density));
+    cx.refresh_windows();
+}
+
+/// The current row density.
+pub fn density(cx: &App) -> Density {
+    cx.try_global::<ActiveDensity>().map(|d| d.0).unwrap_or_default()
+}
+
+/// The height of one repeated row at the current density. Components use
+/// it for their rows; use it for your own row-shaped elements so they
+/// follow the setting too.
+pub fn row_height(cx: &App) -> Pixels {
+    density(cx).row()
+}
 
 /// The last time the palette on screen changed at runtime: a counter and
 /// the palette it changed *from*. `chrome::window_frame` keys its glitch
@@ -116,6 +178,7 @@ fn record_shift(from: &'static Palette, cx: &mut App) {
 /// - `FERRITE_SCHEME=harbor` — any key in [`crate::schemes::SCHEMES`]
 /// - `FERRITE_APPEARANCE=light|dark|system`
 /// - `FERRITE_FPS=25` — the refresh rate (12–240)
+/// - `FERRITE_DENSITY=compact|cozy|roomy` — row density
 ///
 /// Unset or unrecognised values change nothing.
 pub fn apply_env(cx: &mut App) {
@@ -133,6 +196,15 @@ pub fn apply_env(cx: &mut App) {
     }
     if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
         crate::motion::set_fps(fps);
+    }
+    let density = match std::env::var("FERRITE_DENSITY").as_deref() {
+        Ok("compact") => Some(Density::Compact),
+        Ok("cozy") => Some(Density::Cozy),
+        Ok("roomy") => Some(Density::Roomy),
+        _ => None,
+    };
+    if let Some(d) = density {
+        set_density(d, cx);
     }
 }
 
@@ -167,6 +239,16 @@ fn resolve(pref: Appearance, os: WindowAppearance) -> Tone {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn density_orders_row_heights() {
+        let rows: Vec<_> = Density::ALL.iter().map(|d| d.row()).collect();
+        assert!(rows.windows(2).all(|w| w[0] < w[1]));
+        assert_eq!(Density::default().row(), px(28.), "cozy is the historical size");
+        for (i, d) in Density::ALL.iter().enumerate() {
+            assert_eq!(d.index(), i);
+        }
+    }
 
     #[test]
     fn explicit_preferences_ignore_the_os() {

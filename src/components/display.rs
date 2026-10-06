@@ -285,7 +285,7 @@ impl RenderOnce for PropertyList {
                 .flex_row()
                 .items_center()
                 .gap_3()
-                .min_h(px(26.))
+                .min_h(crate::theme::row_height(cx) - px(2.))
                 .when(i > 0, |el| el.border_t_1().border_color(hsla(p.line)))
                 .child(div().w(key_width).flex_none().body(text::SM).text_color(hsla(p.fg_dim)).child(k))
                 // A flex row, so a tag or a meter keeps its own width.
