@@ -248,3 +248,34 @@ and snaps inside the window, and move focus into it on open (or Escape and
 arrow keys never reach it). Restore focus on close only if it's still
 inside the surface.
 
+## 25. Key bindings run before key listeners — ✅ handled in the palette
+
+gpui dispatches a keystroke to **key bindings first** (deepest key context
+first, trying the next only if a handler calls `propagate()`), and only then
+to `on_key_down` listeners. So a container listening for ↑/↓/Enter never sees
+them while a text input inside it is focused — the input binds those keys.
+
+For anything that navigates while an input has focus, register **bindings**
+in your own key context on an ancestor (`.key_context("FerritePalette")` +
+`cx.bind_keys(..)` + `.on_action(..)`). A single-line input has nowhere to
+move ↑/↓ and propagates them, so your binding gets them next. As a backstop,
+also handle the input's `InputEvent::PressEnter`, and make "confirm"
+idempotent so receiving both is harmless.
+
+## 26. Don't run user callbacks inside your own entity update
+
+A palette command handler may update any entity — including the palette.
+Called directly from the palette's `cx.listener`, that is a re-entrant
+update and panics. Close first, then run the handler on the next tick with
+`window.defer(cx, ..)`.
+
+## 27. Testing note: more PowerShell aliases, and stubborn wheel events
+
+- `Type` is an alias for `Get-Content` (like `Move` → `Move-Item`, §16):
+  name helpers `TypeText`, `MouseTo`. Text goes in as posted `WM_CHAR`.
+- Modifier shortcuts (Ctrl+Shift+P) can't be faked with posted messages —
+  they read real keyboard state. Give every palette-style feature a
+  clickable entry point too (that's good UX anyway) and test through it.
+- Sent `WM_MOUSEWHEEL` sometimes takes a couple of rounds after launch
+  before gpui scrolls. Send in batches and re-check with a capture.
+

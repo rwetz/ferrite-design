@@ -123,6 +123,38 @@ ferrite-myapp/
   gpui-component only for what COMPONENTS.md still lists as open (inputs,
   virtual lists, tables, docking, menus).
 
+## Step 5b — A command palette (recommended)
+
+Every Ferrite app should expose its actions in a palette. One per window:
+
+```rust
+use ferrite_design::components::{CommandPalette, TogglePalette, command};
+
+// in the root view's constructor
+let palette = cx.new(|cx| {
+    let mut p = CommandPalette::new(window, cx);
+    p.set_commands(vec![
+        command("Open folder").group("File").icon(Icon::Folder).shortcut("Ctrl+O")
+            .on_run(|window, cx| { /* … */ }),
+        // …
+    ], cx);
+    p
+});
+
+// in render: host it and toggle it
+div()
+    .on_action(cx.listener(|this, _: &TogglePalette, window, cx| {
+        this.palette.update(cx, |p, cx| p.toggle(window, cx));
+    }))
+    .child(self.palette.clone())
+
+// in main, after ferrite_design::init
+cx.bind_keys([KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
+```
+
+Also give it a clickable entry point (a title-bar or toolbar button). The
+components example has the full version.
+
 ## Step 6 — Run
 
 ```bash

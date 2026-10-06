@@ -22,6 +22,8 @@ window chrome, and the rules that hold them together.
 
 ![Menus, popover and pixel icons](docs/img/components-overlays.png)
 
+![Command palette — fuzzy filter over a screen-doored app](docs/img/components-palette.png)
+
 ## Scope
 
 **For:** native desktop apps built on [GPUI](https://gpui.rs) (Rust,
@@ -49,8 +51,9 @@ gradients, stepped motion. The side-by-side is in
 | `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
 | `motion` | Stepped motion vocabulary, blink, reduced-motion check. |
 | `chrome` | Window options, square corners on Windows 11, and Ferrite's own `TitleBar`. |
-| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
+| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner`, `popover`, `dropdown_menu`, `context_menu`, `CommandPalette` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
 | `icon` | 21 pixel icons drawn on the display font's grid; they never fall back to a system font. |
+| `fuzzy` | The palette's matcher: exact best-alignment scoring (word starts, runs, gaps) with match positions. |
 
 ## Use
 
@@ -98,7 +101,8 @@ cargo test                                         # palette/schema/dither tripw
 
 ## Components: native first, gpui-component for the heavy parts
 
-Everyday controls, popovers and menus are native Ferrite components.
+Everyday controls, popovers, menus and the command palette are native
+Ferrite components.
 Inputs, virtual lists, tables and docking still come from
 [gpui-component](https://github.com/longbridge/gpui-kit), re-skinned by
 Ferrite's theme, and are being replaced one at a time. Status, order and

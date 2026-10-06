@@ -32,6 +32,7 @@ pub mod chrome;
 pub mod components;
 pub mod dither;
 pub mod fonts;
+pub mod fuzzy;
 pub mod icon;
 pub mod motion;
 mod raster;
@@ -49,6 +50,7 @@ pub use tokens::{IRON, PAPER, Palette};
 /// is already Ferrite.
 pub fn init(appearance: Appearance, cx: &mut gpui::App) {
     gpui_component::init(cx);
+    components::palette::init(cx);
     if let Err(err) = fonts::register(cx) {
         // Text falls back to system faces; the app still works.
         eprintln!("ferrite-design: failed to register embedded fonts: {err:#}");

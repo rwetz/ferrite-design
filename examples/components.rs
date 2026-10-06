@@ -13,7 +13,7 @@ use ferrite_design::{
     Appearance, FerriteText, Icon, Scale,
     chrome::{self, title_bar},
     components::{
-        Align, Button, checkbox, context_menu, cursor, dropdown_menu, kbd, list_item, menu_item,
+        Align, Button, CommandPalette, TogglePalette, checkbox, command, context_menu, cursor, dropdown_menu, kbd, list_item, menu_item,
         meter, panel, popover, radio, rule, spinner, status_bar, switch, tabs, tag, tooltip,
     },
     icon::icon,
@@ -21,7 +21,7 @@ use ferrite_design::{
     tokens::{hsla, space, text},
 };
 use gpui::{
-    App, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement, Render,
+    App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render,
     SharedString, StatefulInteractiveElement as _, Styled, Subscription, Window, div, px, size,
 };
 use gpui_component::{
@@ -58,6 +58,7 @@ struct Components {
     hide_merged: bool,
     only_mine: bool,
     compact: bool,
+    palette: Entity<CommandPalette>,
     _appearance: Subscription,
 }
 
@@ -92,8 +93,66 @@ impl Components {
             hide_merged: true,
             only_mine: false,
             compact: false,
+            palette: Self::build_palette(window, cx),
             _appearance: theme::follow_system(window),
         }
+    }
+
+    /// Every command the app offers. Handlers reach the view through a weak
+    /// handle; the palette defers them a tick, so updating anything is safe.
+    fn build_palette(window: &mut Window, cx: &mut Context<Self>) -> Entity<CommandPalette> {
+        let this = cx.weak_entity();
+        let on = |f: fn(&mut Components, &mut Window, &mut Context<Components>)| {
+            let this = this.clone();
+            move |window: &mut Window, cx: &mut App| {
+                let _ = this.update(cx, |v, cx| f(v, window, cx));
+            }
+        };
+        let theme_cmd = |label: &'static str, pref: Appearance, icon: Icon| {
+            command(label).group("Theme").icon(icon).keywords(["appearance", "mode", "color"]).on_run(move |window, cx| {
+                theme::set_appearance(pref, window, cx);
+            })
+        };
+        let commands = vec![
+            command("New file").group("File").icon(Icon::Plus).shortcut("Ctrl+N").on_run(on(|v, _, cx| v.log("NEW FILE", cx))),
+            command("Open folder").group("File").icon(Icon::Folder).shortcut("Ctrl+O").on_run(on(|v, _, cx| v.log("OPEN FOLDER", cx))),
+            command("Duplicate file").group("File").icon(Icon::Copy).on_run(on(|v, _, cx| v.log("DUPLICATE", cx))),
+            command("Delete file").group("File").icon(Icon::Trash).keywords(["remove", "trash"]).on_run(on(|v, _, cx| v.log("DELETE", cx))),
+            command("Run task").group("Run").icon(Icon::Play).shortcut("Ctrl+R").on_run(on(|v, _, cx| {
+                v.clicks += 1;
+                let n = v.clicks;
+                v.log(format!("RUN ×{n}"), cx);
+            })),
+            command("Deploy").group("Run").icon(Icon::Up).keywords(["ship", "release"]).on_run(on(|v, _, cx| v.deploy(cx))),
+            command("Stop all").group("Run").icon(Icon::Stop).on_run(on(|v, _, cx| v.log("STOPPED", cx))),
+            command("Toggle word wrap").group("View").icon(Icon::Menu).shortcut("Alt+Z").keywords(["soft wrap", "lines"]).on_run(on(|v, _, cx| {
+                v.word_wrap = !v.word_wrap;
+                let s = if v.word_wrap { "WRAP ON" } else { "WRAP OFF" };
+                v.log(s, cx);
+            })),
+            command("Toggle hidden files").group("View").icon(Icon::File).on_run(on(|v, _, cx| {
+                v.show_hidden = !v.show_hidden;
+                let s = if v.show_hidden { "HIDDEN ON" } else { "HIDDEN OFF" };
+                v.log(s, cx);
+            })),
+            command("Go to Files").group("View").icon(Icon::ChevronRight).on_run(on(|v, _, cx| { v.tab = 0; v.row = 0; v.log("TAB 1", cx); })),
+            command("Go to Processes").group("View").icon(Icon::ChevronRight).on_run(on(|v, _, cx| { v.tab = 1; v.row = 0; v.log("TAB 2", cx); })),
+            command("Go to Config").group("View").icon(Icon::ChevronRight).on_run(on(|v, _, cx| { v.tab = 2; v.row = 0; v.log("TAB 3", cx); })),
+            theme_cmd("Theme: Iron", Appearance::Dark, Icon::Dot),
+            theme_cmd("Theme: Paper", Appearance::Light, Icon::File),
+            theme_cmd("Theme: Follow system", Appearance::System, Icon::Sliders),
+            command("Git: Stage all").group("Git").icon(Icon::Plus).on_run(on(|v, _, cx| v.log("STAGED", cx))),
+            command("Git: Commit").group("Git").icon(Icon::Check).shortcut("Ctrl+Enter").on_run(on(|v, _, cx| v.log("COMMITTED", cx))),
+            command("Git: Push").group("Git").icon(Icon::Up).keywords(["upload", "publish"]).on_run(on(|v, _, cx| v.log("PUSHED", cx))),
+            command("Git: Pull").group("Git").icon(Icon::Down).keywords(["fetch", "sync"]).on_run(on(|v, _, cx| v.log("PULLED", cx))),
+            command("Search docs").group("Help").icon(Icon::Search).on_run(on(|v, _, cx| v.log("DOCS", cx))),
+            command("Report an issue").group("Help").icon(Icon::Warning).keywords(["bug"]).on_run(on(|v, _, cx| v.log("REPORT", cx))),
+        ];
+        cx.new(|cx| {
+            let mut palette = CommandPalette::new(window, cx);
+            palette.set_commands(commands, cx);
+            palette
+        })
     }
 
     fn log(&mut self, what: impl Into<SharedString>, cx: &mut Context<Self>) {
@@ -389,6 +448,13 @@ impl Render for Components {
                 .gap_3()
                 .child(section("dropdown + popover", window, cx))
                 .child(row().child(file_menu).child(filters).child(div().flex_1()).child(more_menu))
+                .child(section("command palette", window, cx))
+                .child(row().child(
+                    Button::new("palette-btn").label("Commands").icon(Icon::Search).shortcut("Ctrl+Shift+P").on_click({
+                        let palette = self.palette.clone();
+                        move |_, window, cx| palette.update(cx, |p, cx| p.open(window, cx))
+                    }),
+                ))
                 .child(section("context menu", window, cx))
                 .child(ctx_area),
         );
@@ -414,6 +480,10 @@ impl Render for Components {
             .bg(hsla(p.bg))
             .text_color(hsla(p.fg))
             .body(text::BASE)
+            .on_action(cx.listener(|this, _: &TogglePalette, window, cx| {
+                this.palette.update(cx, |p, cx| p.toggle(window, cx));
+            }))
+            .child(self.palette.clone())
             .child(title_bar("Ferrite Components"))
             .child(
                 div().id("scroll").flex_1().min_h_0().overflow_y_scroll().child(
@@ -456,6 +526,7 @@ fn main() {
             _ => Appearance::Dark,
         };
         ferrite_design::init(appearance, cx);
+        cx.bind_keys([gpui::KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
         let options = chrome::window_options("Ferrite Components", size(px(1180.), px(900.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);

@@ -267,6 +267,8 @@ The control grammar, in one place:
 | icons | 16×16 pixel `Icon`s on the type grid; text glyphs only if `display_has` |
 | keyboard focus | 1px amber frame, keyboard-only (`focus_visible`) |
 | floating surface | `raised` fill, 1px `line_strong` frame, hard 4px dithered drop shadow |
+| modal | the app behind is **screen-doored** — a 50% dither in the page color — never blurred or tinted |
+| match highlight | matched characters in `accent_text`, nothing else |
 
 Conventions for any component, ours or wrapped:
 
