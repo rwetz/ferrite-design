@@ -3,6 +3,9 @@
 //!
 //!     cargo run --example minimal
 
+// Release builds are GUI-subsystem on Windows: no console window behind the app.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use ferrite_design::{Appearance, chrome, components::status_bar, palette, tokens::hsla};
 use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
            Subscription, Window, div, px, size};

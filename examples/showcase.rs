@@ -3,6 +3,9 @@
 //!
 //!     cargo run --example showcase
 
+// Release builds are GUI-subsystem on Windows: no console window behind the app.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use ferrite_design::{
     Appearance, FerriteText, Scale, ascii,
     chrome::{self, title_bar},
@@ -17,12 +20,8 @@ use gpui::{
     Window, div, px, size, InteractiveElement as _,
     StatefulInteractiveElement as _,
 };
-use gpui_component::{
-    Root,
-    button::{Button, ButtonVariants as _},
-    switch::Switch,
-    tag::Tag,
-};
+use ferrite_design::components::{Button, switch, tag};
+use gpui_component::Root;
 
 struct Showcase {
     tick: u64,
@@ -152,10 +151,10 @@ impl Render for Showcase {
                                     .child(swatch("SUCCESS", p.success, window))
                                     .child(swatch("WARNING", p.warning, window)),
                             )
-                            // ── Controls (gpui-component, Ferrite-themed) ────
+                            // ── Controls (native Ferrite components) ─────────
                             .child(
                                 panel("Controls")
-                                    .meta("gpui-component")
+                                    .meta("native")
                                     .flex_1()
                                     .child(
                                         div()
@@ -169,10 +168,10 @@ impl Render for Showcase {
                                             .child(Button::new("kill").label("KILL").danger()),
                                     )
                                     .child(
-                                        Switch::new("appearance")
+                                        switch("appearance")
                                             .checked(!is_dark)
                                             .label("Paper mode")
-                                            .on_click(cx.listener(|_, checked: &bool, window, cx| {
+                                            .on_change(cx.listener(|_, checked: &bool, window, cx| {
                                                 let pref = if *checked { Appearance::Light } else { Appearance::Dark };
                                                 theme::set_appearance(pref, window, cx);
                                             })),
@@ -182,10 +181,10 @@ impl Render for Showcase {
                                             .flex()
                                             .flex_row()
                                             .gap_2()
-                                            .child(Tag::primary().child("LIVE"))
-                                            .child(Tag::secondary().child("IDLE"))
-                                            .child(Tag::danger().child("FAULT"))
-                                            .child(Tag::success().child("OK")),
+                                            .child(tag("live").accent())
+                                            .child(tag("idle"))
+                                            .child(tag("fault").danger())
+                                            .child(tag("ok").success()),
                                     )
                                     .child(rule(Some("progress"), window, cx))
                                     .child(progress_bar(value, px(16.), cx))
@@ -235,7 +234,7 @@ impl Render for Showcase {
                 status_bar()
                     .left("READY")
                     .left(if is_dark { "IRON" } else { "PAPER" })
-                    .left(ascii::bracket("gpui-component 0.7.1"))
+                    .left(ascii::bracket("native controls"))
                     .right(format!("SCALE {:.2}x", window.scale_factor()))
                     .right(format!("{}", motion::FRAME.as_millis()) + "MS/FRAME"),
             )

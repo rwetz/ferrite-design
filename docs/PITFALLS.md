@@ -127,12 +127,23 @@ the top 1–2 device pixels of the window, likely the resize border gpui keeps
 on a transparent-titlebar window. Not yet confirmed by eye or fixed. Check
 before shipping an app that paints content right up to the top edge.
 
-## 16. Testing note: screenshotting/scrolling at fractional scale
+## 16. Testing note: drive the window, not the desktop
 
-When driving the app from a script (PowerShell, AutoHotkey…) for screenshots,
-the script process must be DPI-aware (`SetProcessDPIAware`) or cursor
-coordinates are scaled and synthetic wheel events land outside the window —
-which looks exactly like "scrolling is broken" when it isn't.
+When scripting a Ferrite app for screenshots or interaction tests on Windows:
+
+- **Don't move the real cursor or send global input** (`SetCursorPos`,
+  `mouse_event`, `SendInput`). If anything else is in front — and Windows
+  often refuses `SetForegroundWindow` — the clicks and scrolls land in
+  *that* window. This happened while building the components showcase.
+- Instead **post messages to the app's own HWND** (`WM_MOUSEMOVE`, then
+  `WM_LBUTTONDOWN`/`UP` with client coordinates; `WM_MOUSEWHEEL` with screen
+  coordinates) and **capture with `PrintWindow(hwnd, hdc,
+  PW_RENDERFULLCONTENT)`**, which works even when the window is covered.
+  gpui handles posted input normally.
+- Make the script DPI-aware (`SetProcessDPIAware`) or every coordinate is
+  scaled at 125%/150%.
+- Launch debug builds from a shell, not `Start-Process`: debug binaries are
+  console-subsystem (§18) and the console window lands on top.
 
 ## 17. Per-frame work pegs a core — ✅ handled
 
@@ -164,3 +175,37 @@ each now fixed; measured after the fix: **3.8%**, with the showcase's own
 
 General rule: nothing in a Ferrite view should cost O(pixels) per frame.
 Measure idle CPU (`Get-Process`/`top`) whenever adding anything animated.
+
+## 18. Windows: a console window opens behind the app
+
+A Rust binary is console-subsystem by default, so launching it from Explorer
+or a shortcut opens a terminal window too. Every Ferrite `main.rs` starts
+with:
+
+```rust
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+```
+
+Release builds are GUI-only; debug builds keep the console for logs.
+
+## 19. gpui has no per-side border colors
+
+`border_t_color` and friends don't exist — one `border_color` covers every
+side. For a colored edge (the active tab's amber top), draw a separate
+absolutely positioned 2px element. To "open" one side (the active tab onto
+its content), give the neighbours that side's border and leave it off this
+element, rather than recoloring it.
+
+## 20. A loading button must not change width
+
+The first components showcase relabelled a button "Deploy" → "Deploying"
+and added a spinner on click; the button grew, its neighbour shifted under
+the pointer, and the next click hit the wrong control. Give loading-capable
+buttons a glyph (the spinner replaces it) and keep the label constant.
+
+## 21. Interactive components need a focus handle in keyed state
+
+A focus handle created in `render` is a new handle every frame, so focus is
+lost on every redraw. Store it with
+`window.use_keyed_state(id, cx, |_, cx| cx.focus_handle())`, as every Ferrite
+component does; it lives exactly as long as the element keeps rendering.

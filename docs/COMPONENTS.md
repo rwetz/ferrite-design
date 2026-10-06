@@ -18,32 +18,49 @@ step.
 
 ## What's already native
 
+See every one of them live: `cargo run --example components`.
+
 | Component | Module | Notes |
 |---|---|---|
 | `TitleBar` + window controls | `chrome` | replaced gpui-component's `TitleBar` from the start |
-| `Panel` | `components` | `[ TITLE ]` header + dither fill |
-| `StatusBar` | `components` | `│`-separated display-face segments |
-| `rule` | `components` | labelled 1px divider |
-| `cursor` | `components` | square-wave blinking block |
-| `progress_bar` | `components` | dithered leading edge (replaces `Progress`) |
-| `empty_state` | `components` | radial dither + message |
-| `Dither` | `dither` | the texture primitive everything else uses |
+| **`Button`** | `components::button` | primary / secondary / ghost `[ LABEL ]` / danger; small; glyph, shortcut, tooltip, loading, toggle (`selected`); disabled = dashed frame; pressed = inverse video |
+| **`checkbox` / `radio`** | `components::toggle` | `[x]` `[ ]` `[-]` / `(•)` `( )` display-face marks, body labels |
+| **`switch`** | `components::toggle` | square thumb, dithered off-track, `ON`/`OFF` readout |
+| **`tag`** | `components::tag` | solid (inverse video) or outline, five tones |
+| **`meter`** | `components::tag` | segmented LED bar, warning/danger zones |
+| **`tabs`** | `components::tabs` | `│ TAB │` strip, amber top edge, optional count |
+| **`list_item`** | `components::list` | selectable row: amber bar + `accent_dim` wash, glyph, meta |
+| **`tooltip` / `kbd`** | `components::tooltip` | square tooltip with optional keycaps |
+| **`spinner` / `cursor` / `ticker`** | `components::ticker` | timer-driven periodic state (no per-frame redraws) |
+| `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing |
+| `Dither` | `dither` | the texture primitive |
+
+Every interactive component carries the behaviour ported from
+gpui-component: its own focus handle, Tab-order participation, Enter/Space
+activation (gpui's keyboard click), no focus-steal on mouse down, a
+keyboard-only focus frame (`focus_visible`), and an accessibility
+role/label/toggled state.
+
+**Known gap:** gpui exposes no accessibility "disabled" state. Disabled
+controls drop out of the tab order and ignore input, but screen readers
+aren't told they're disabled.
 
 ## Replacement order
 
-Ranked by how much the library default fights Ferrite, times how often apps
-use it.
+| # | gpui-component piece | Status |
+|---|---|---|
+| 1 | `window_border` (Linux CSD) | **open** — needs verifying on Linux; rounds corners today |
+| 2 | `Button` | ✅ native |
+| 3 | `Switch` / `Checkbox` / `Radio` | ✅ native |
+| 4 | `Tag` / `Badge` | ✅ native (+ `meter`) |
+| 5 | `Tooltip` / `Popover` / menus | tooltip ✅ native; popover + menus **open** (need anchored positioning + dismissal) |
+| 6 | `Tab` / `TabBar` | ✅ native (+ `list_item`) |
+| 7 | `Input` | **last, if ever** — IME, selection, undo |
+| — | `List`, `Table`, `VirtualList`, `Dock`, `Resizable` | keep wrapping; put `list_item` rows inside the library's virtual list |
 
-| # | gpui-component piece | Why first | Ferrite version |
-|---|---|---|---|
-| 1 | `window_border` (Linux CSD) | rounds corners; we need square resize edges | `chrome::WindowFrame` |
-| 2 | `Button` | most-used; pill/ring geometry, icon set | `[ LABEL ]` text-mode buttons, accent fill for primary, inverted on press |
-| 3 | `Switch` / `Checkbox` / `Radio` | rounded thumbs are off-language | `[x]` / `[ ]` / `(•)` glyph toggles |
-| 4 | `Tag` / `Badge` | rounded pills | bracketed inverse-video labels |
-| 5 | `Tooltip` / `Popover` / menus | shadows, radius | square, 1px `line_strong`, `raised` fill |
-| 6 | `Tab` / `TabBar` | | `│ TAB │` with accent underline |
-| 7 | `Input` | hardest (IME, selection, undo) — **last**, if ever | block caret, `sunken` well |
-| — | `List`, `Table`, `VirtualList`, `Dock`, `Resizable` | behaviour-heavy, theme well already | keep wrapping; revisit only with a concrete reason |
+Next up: **popover + menu** (the last high-traffic piece with off-language
+geometry), then **`window_border`** once there's a Linux machine to verify
+it on.
 
 Inputs, virtualised lists and docking are where a component library earns its
 keep. Replacing them is not a goal in itself.

@@ -5,15 +5,29 @@
 //! library has no opinion on — the *framing* — so apps can use gpui-component
 //! widgets inside Ferrite frames today.
 
+pub mod button;
+pub mod list;
+pub mod tabs;
+pub mod tag;
+pub mod ticker;
+pub mod toggle;
+pub mod tooltip;
+
+pub use button::Button;
+pub use list::{ListItem, list_item};
+pub use tabs::{Tabs, tabs};
+pub use tag::{Meter, Tag, meter, tag};
+pub use toggle::{Switch, Toggle, checkbox, radio, switch};
+pub use ticker::{Cursor, Spinner, cursor, spinner, ticker};
+pub use tooltip::{Kbd, Tooltip, kbd, tooltip};
+
 use gpui::{
-    AnyElement, App, ElementId, IntoElement, ParentElement, Pixels, RenderOnce,
-    SharedString, StyleRefinement, Styled, Task, Window, div, prelude::FluentBuilder as _, px,
-    relative,
+    AnyElement, App, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::dither::{self, dither};
 use crate::fonts::{FerriteText, Scale};
-use crate::motion;
 use crate::theme::palette;
 use crate::tokens::{hsla, text};
 
@@ -160,60 +174,6 @@ impl RenderOnce for StatusBar {
             .text_color(hsla(p.fg_dim))
             .child(segments(self.left, window))
             .child(segments(self.right, window))
-    }
-}
-
-// ── Cursor ────────────────────────────────────────────────────────────────
-
-/// A blinking block caret — the "live" marker. Square-wave, not a fade.
-/// Solid under reduced motion.
-///
-/// Blinks on a timer that flips state twice per [`motion::BLINK`], so the
-/// window redraws 2×/s. A repeating `with_animation` would look identical
-/// but redraws the whole window every display frame for as long as the
-/// cursor is on screen (PITFALLS §17).
-#[derive(IntoElement)]
-pub struct Cursor {
-    id: ElementId,
-}
-
-pub fn cursor(id: impl Into<ElementId>) -> Cursor {
-    Cursor { id: id.into() }
-}
-
-struct Blink {
-    on: bool,
-    _ticker: Task<()>,
-}
-
-impl RenderOnce for Cursor {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let p = palette(cx);
-        let on = if motion::reduced(cx) {
-            true
-        } else {
-            let state = window.use_keyed_state(self.id, cx, |_, cx| Blink {
-                on: true,
-                _ticker: cx.spawn(async move |this, cx| {
-                    loop {
-                        cx.background_executor().timer(motion::BLINK / 2).await;
-                        let alive = this.update(cx, |blink: &mut Blink, cx| {
-                            blink.on = !blink.on;
-                            cx.notify();
-                        });
-                        if alive.is_err() {
-                            break;
-                        }
-                    }
-                }),
-            });
-            state.read(cx).on
-        };
-        div()
-            .display(Scale::X1, window)
-            .text_color(hsla(p.accent))
-            .when(!on, |el| el.opacity(0.))
-            .child("█")
     }
 }
 

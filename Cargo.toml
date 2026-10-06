@@ -37,3 +37,6 @@ name = "showcase"
 
 [[example]]
 name = "minimal"
+
+[[example]]
+name = "components"

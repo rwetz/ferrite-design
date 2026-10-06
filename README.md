@@ -14,6 +14,12 @@ window chrome, and the rules that hold them together.
 |---|---|
 | ![Paper](docs/img/showcase-paper.png) | ![Dither](docs/img/showcase-dither.png) |
 
+**Native components** (`cargo run --example components`):
+
+| Iron | Paper |
+|---|---|
+| ![Components — Iron](docs/img/components-iron.png) | ![Components — Paper](docs/img/components-paper.png) |
+
 ## Scope
 
 **For:** native desktop apps built on [GPUI](https://gpui.rs) (Rust,
@@ -41,7 +47,7 @@ gradients, stepped motion. The side-by-side is in
 | `ascii` | Shade ramps, bars, spinners, sparklines, brackets, rules, box drawing. |
 | `motion` | Stepped motion vocabulary, blink, reduced-motion check. |
 | `chrome` | Window options, square corners on Windows 11, and Ferrite's own `TitleBar`. |
-| `components` | `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
+| `components` | Native controls — `Button`, `checkbox`, `radio`, `switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner` — and framing: `Panel`, `StatusBar`, `rule`, `cursor`, `progress_bar`, `empty_state`. |
 
 ## Use
 
@@ -73,6 +79,7 @@ Full walkthrough: [docs/SCAFFOLDING.md](docs/SCAFFOLDING.md).
 ```bash
 cargo run --example showcase                       # every primitive, Iron
 FERRITE_APPEARANCE=light cargo run --example showcase   # Paper
+cargo run --example components                     # every native component, live
 cargo run --example minimal                        # the scaffolding guide's app
 cargo test                                         # palette/schema/dither tripwires
 ```
@@ -86,12 +93,13 @@ cargo test                                         # palette/schema/dither tripw
 - [COMPONENTS.md](docs/COMPONENTS.md) — gpui-component today, the plan to
   replace it with native Ferrite components.
 
-## Components: gpui-component now, our own later
+## Components: native first, gpui-component for the heavy parts
 
-Widgets currently come from [gpui-component](https://github.com/longbridge/gpui-kit),
-re-skinned by Ferrite's theme. That is a deliberate short-term choice: the
-long-term goal is a native Ferrite component set, replaced one component at a
-time. The order and the rules are in [COMPONENTS.md](docs/COMPONENTS.md).
+Everyday controls are native Ferrite components. Inputs, virtual lists,
+tables, docking and menus still come from
+[gpui-component](https://github.com/longbridge/gpui-kit), re-skinned by
+Ferrite's theme, and are being replaced one at a time. Status, order and
+rules: [COMPONENTS.md](docs/COMPONENTS.md).
 
 ## License
 

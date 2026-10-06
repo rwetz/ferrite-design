@@ -235,11 +235,26 @@ Use `chrome::window_options(..)` for every window and call
 
 ## 8. Components
 
-Short term, Ferrite apps use **gpui-component** widgets (buttons, inputs,
-lists, tables, menus…) wearing the Ferrite theme. Ferrite's own components
-cover the framing: `TitleBar`, `Panel`, `StatusBar`, `rule`, `cursor`,
-`progress_bar`, `empty_state`, `Dither`. The plan to replace gpui-component
-with native components is in [COMPONENTS.md](COMPONENTS.md).
+Ferrite owns its everyday controls — `Button`, `checkbox`, `radio`,
+`switch`, `tag`, `meter`, `tabs`, `list_item`, `tooltip`, `kbd`, `spinner` —
+and its framing (`TitleBar`, `Panel`, `StatusBar`, `rule`, `cursor`,
+`progress_bar`, `empty_state`, `Dither`). The heavy machinery (inputs,
+virtual lists, tables, docking, menus) still comes from **gpui-component**
+wearing the Ferrite theme. Status and plan: [COMPONENTS.md](COMPONENTS.md);
+see them all with `cargo run --example components`.
+
+The control grammar, in one place:
+
+| Idea | Ferrite expression |
+|---|---|
+| primary action | amber fill, dark label |
+| pressed / toggled on | **inverse video** (fill and ink swap) |
+| disabled | dashed 1px frame, faint ink |
+| busy | ASCII spinner replaces the glyph; size never changes |
+| checked | `[x]` / `(•)` in amber; `[-]` mixed |
+| selected row / tab | 2px amber edge + `accent_dim` wash / open bottom |
+| icons | characters: `▶ ■ ↑ ↻ + × » ●` (CP437/WGL4) |
+| keyboard focus | 1px amber frame, keyboard-only (`focus_visible`) |
 
 Conventions for any component, ours or wrapped:
 

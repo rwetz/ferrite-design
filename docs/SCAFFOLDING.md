@@ -53,6 +53,9 @@ This is `examples/minimal.rs` verbatim (`cargo test` compiles it, so it
 cannot rot):
 
 ```rust
+// Release builds are GUI-subsystem on Windows: no console window behind the app.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use ferrite_design::{Appearance, chrome, components::status_bar, palette, tokens::hsla};
 use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
            Subscription, Window, div, px, size};
@@ -115,8 +118,10 @@ ferrite-myapp/
 - Body: `.body(text::BASE)`; it's already the theme default for widgets.
 - Texture: `dither(..)` only in the places DESIGN_LANGUAGE §5.2 allows.
 - Motion: `motion::*` only; check `motion::reduced(cx)`.
-- Widgets: gpui-component for now — check COMPONENTS.md for a native
-  replacement first.
+- Widgets: native first — `components::{Button, checkbox, radio, switch,
+  tag, meter, tabs, list_item, tooltip, kbd, spinner}`. Fall back to
+  gpui-component only for what COMPONENTS.md still lists as open (inputs,
+  virtual lists, tables, docking, menus).
 
 ## Step 6 — Run
 
