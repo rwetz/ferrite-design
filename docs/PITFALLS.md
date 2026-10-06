@@ -368,8 +368,9 @@ than bind Enter itself, because the deeper binding wins.
 ## 38. Animations: one keyed clip per element, timers only while playing
 
 `animate::play` keeps its clock in keyed element state and spawns a
-25fps timer that notifies the view until the clip finishes, then stops —
-an idle window does no work, unlike a repeating `with_animation` (§17).
+timer at the live refresh rate (`motion::frame()`, 240fps by default) that
+notifies the view until the clip finishes, then stops — an idle window does
+no work, unlike a repeating `with_animation` (§17).
 Two consequences:
 - The clip lives as long as the element renders in consecutive frames.
   Something that stops rendering (a closed menu) starts fresh next time —
@@ -386,9 +387,9 @@ in a loop to see the intermediate frames.
 
 ## 40. Measure idle CPU before and after motion work
 
-Every running clip redraws the whole window at 25fps. One clip at a time
-is nothing; something that *keeps* restarting a clip is a 25fps animation
-loop. The first cut rolled the gallery's meters on every 500ms data update
+Every running clip redraws the whole window at the refresh rate (240fps by
+default; it was 25 when this was written). One clip at a time is nothing;
+something that *keeps* restarting a clip is an animation loop at that rate. The first cut rolled the gallery's meters on every 500ms data update
 and pushed idle CPU from 17% to 30% of a core. Live data now doesn't
 animate (DESIGN_LANGUAGE §6.2). Check with the process's CPU time over a
 few seconds, on the busiest page, against the previous commit — the
@@ -422,3 +423,39 @@ box and wraps — the switch's `OFF` became `OF`/`F`. DirectWrite lands on or
 under the cell, so Windows never shows it. Never size a box to exactly the
 text it holds: the switch readout is four cells for a three-letter word,
 which also keeps `OFF` off the label beside it.
+
+## 44. Linux: no window at all without gpui's display backends — ✅ handled
+
+`gpui-pre-platform` depends on `gpui-pre-linux` with **default features
+off**, so neither `x11` nor `wayland` is compiled in. The platform falls
+back to headless: the app starts, runs its event loop, logs nothing, and
+no window ever appears. Same shape as the macOS text system (§41).
+Cargo.toml turns both backends on in a `cfg(target_os = "linux")` section.
+Building then needs the usual development packages (Debian/Ubuntu:
+`libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libxcb1-dev
+libfontconfig-dev`); without them the link fails on `-lxkbcommon`.
+Found 2026-10-06 — the first time a Ferrite app was run on Linux.
+
+To see Ferrite on a headless Linux box (CI, a container): Xvfb plus Mesa's
+software Vulkan (`mesa-vulkan-drivers`), with
+`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`, renders correctly;
+`xdotool` drives it and `import -window root` captures it.
+
+## 45. `uniform_list` rows need a width, or only their text is clickable — ✅ handled
+
+gpui lays each `uniform_list` row out *as a root*. A row with no width of
+its own gets a hitbox exactly as wide as its content: it paints across the
+list (children overflow), but a click to the right of the text lands on
+nothing. The workbench template's code lines ignored every click past the
+last character. `virtual_list` now wraps every row in a full-width box; if
+you use `uniform_list` directly, give rows `.w_full()`.
+
+## 46. Live data in an animated slot animates forever
+
+Anything that *decrypts on change* (status-bar segments, `decrypt`, a
+`stat` value) turns a counter that ticks every 400ms into a permanent
+animation at the refresh rate — the window never idles. Route continuous
+values through the non-animating variants (`StatusBar::left_live` /
+`right_live`, a plain `div`), and keep the animated ones for values that
+change as events (DESIGN_LANGUAGE §6.3).
+

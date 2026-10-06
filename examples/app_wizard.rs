@@ -221,9 +221,8 @@ impl Render for Wizard {
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
         ferrite_design::init(Appearance::Dark, cx);
-        if let Some(scheme) = std::env::var("FERRITE_SCHEME").ok().and_then(|k| ferrite_design::schemes::by_key(&k)) {
-            ferrite_design::theme::set_scheme(scheme, cx);
-        }
+        // FERRITE_SCHEME / FERRITE_APPEARANCE / FERRITE_FPS, for trying other looks.
+        theme::apply_env(cx);
         let mut options = chrome::window_options("Setup", size(px(720.), px(560.)), cx);
         options.is_resizable = false;
         cx.open_window(options, |window, cx| {

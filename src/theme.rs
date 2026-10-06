@@ -83,6 +83,32 @@ pub fn set_scheme(scheme: &'static Scheme, cx: &mut App) {
     cx.refresh_windows();
 }
 
+/// Developer overrides from the environment, for trying an app in another
+/// look without a settings screen. Call right after [`crate::init`]:
+///
+/// - `FERRITE_SCHEME=harbor` — any key in [`crate::schemes::SCHEMES`]
+/// - `FERRITE_APPEARANCE=light|dark|system`
+/// - `FERRITE_FPS=25` — the refresh rate (12–240)
+///
+/// Unset or unrecognised values change nothing.
+pub fn apply_env(cx: &mut App) {
+    if let Some(scheme) = std::env::var("FERRITE_SCHEME").ok().and_then(|k| crate::schemes::by_key(&k)) {
+        set_scheme(scheme, cx);
+    }
+    let pref = match std::env::var("FERRITE_APPEARANCE").as_deref() {
+        Ok("light") => Some(Appearance::Light),
+        Ok("dark") => Some(Appearance::Dark),
+        Ok("system") => Some(Appearance::System),
+        _ => None,
+    };
+    if let Some(pref) = pref {
+        install(pref, cx);
+    }
+    if let Some(fps) = std::env::var("FERRITE_FPS").ok().and_then(|v| v.parse().ok()) {
+        crate::motion::set_fps(fps);
+    }
+}
+
 fn set_tone(tone: Tone, cx: &mut App) {
     cx.set_global(ActiveTone(tone));
     cx.refresh_windows();

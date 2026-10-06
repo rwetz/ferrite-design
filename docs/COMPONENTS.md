@@ -1,112 +1,146 @@
-# Components — today and the plan
+# Components
 
-## The decision
+**Everything is Ferrite's own.** Ferrite depends on gpui and nothing built
+on top of it — no component library, no second theme system. See every
+component live with `cargo run --example components` (one page per family,
+with a scheme picker), and whole apps built from them in `examples/app_*.rs`.
 
-**Everything is Ferrite's own.** Ferrite depends on gpui and nothing built on
-top of it — no component library, no second theme system. It started on
-[gpui-component](https://github.com/longbridge/gpui-kit) (Longbridge) as a
-stop-gap and replaced it piece by piece; the last pieces (text input,
-scrollbars, virtual list, split pane, window frame, the theme bridge and
-`Root`) went in one pass.
+`use ferrite_design::prelude::*;` imports all of them.
 
-Why it was worth it: a shadcn-shaped library's geometry (pills, rings,
-padding, icon set) leaks through any theme, its theme schema can drift under
-you (PITFALLS §4), and its release cadence pins your gpui (§1).
+## Catalogue
 
-Behaviour that was hard-won in gpui-component (focus handling, keyboard
-activation, overlay dismissal, the title bar's platform quirks) was ported,
-not reinvented — see the module docs for what came from where.
-
-## What's already native
-
-See every one of them live: `cargo run --example components`.
+### Controls
 
 | Component | Module | Notes |
 |---|---|---|
-| `TitleBar` + window controls | `chrome` | replaced gpui-component's `TitleBar` from the start |
-| **`Button`** | `components::button` | primary / secondary / ghost `[ LABEL ]` / danger; small; glyph, shortcut, tooltip, loading, toggle (`selected`); disabled = dashed frame; pressed = inverse video |
-| **`checkbox` / `radio`** | `components::toggle` | `[x]` `[ ]` `[-]` / `(•)` `( )` display-face marks, body labels |
-| **`switch`** | `components::toggle` | square thumb, dithered off-track, `ON`/`OFF` readout |
-| **`tag`** | `components::tag` | solid (inverse video) or outline, five tones |
-| **`meter`** | `components::tag` | segmented LED bar, warning/danger zones |
-| **`tabs`** | `components::tabs` | `│ TAB │` strip, amber top edge, optional count |
-| **`list_item`** | `components::list` | selectable row: amber bar + `accent_dim` wash, glyph, meta |
-| **`tooltip` / `kbd`** | `components::tooltip` | square tooltip with optional keycaps |
-| **`popover`** | `components::overlay` | non-modal panel under a trigger, `[ TITLE ]` header, hard dithered drop shadow |
-| **`dropdown_menu` / `context_menu`** | `components::menu` | icons, shortcuts, check toggles, section labels, separators, danger + disabled rows, nested `submenu`s (open on hover, → / ← / Esc per level, cascade snaps on screen as one); full keyboard nav |
-| **`CommandPalette`** | `components::palette` | modal, fuzzy-ranked (`fuzzy`), grouped when empty, amber match highlights, screen-door scrim; wraps gpui-component's `Input` for the text field |
-| **`Toaster` / `toast`** | `components::toast` | bottom-right stack of up to 4; info/success/warning/danger with pixel icon + `INFO OK WARN ERR` code; stepped 16-segment countdown, paused on hover; dither materialise on entry; optional action; sticky |
-| **`dialog`** | `components::dialog` | controlled modal: `[ TITLE ]` header, description + any content, cancel (Esc) / confirm (Enter) footer, screen-door backdrop; `.danger()` for destructive confirms |
-| **`segmented`** | `components::segmented` | one-of-few strip, selected segment in inverse video; ←/→ move |
-| **`slider`** | `components::slider` | discrete LED-cell track snapped to `step`, tall thumb cell, fixed-width readout; drag with pointer capture, arrows/PageUp/Home/End |
-| **`tree`** | `components::tree` | 1px connector guides (├ └ │), chevrons, owns its expansion; →/← expand, collapse, step in/out |
-| **`table`** | `components::table` | display-face header with ▲/▼ sort marks, right-aligned numeric columns, row selection; for up to a few hundred rows |
-| **`TextInput`** | `components::input` | single-line field on gpui's `EntityInputHandler` (IME, dead keys), grapheme/word motion, undo/redo, mouse select (double/triple click), horizontal scroll, `.masked()`, `.prompt(">")`; `Change` / `Submit` events |
-| **`scrollbar` / `scroll_area`** | `components::scroll` | square thumb on a hairline track, drag (pointer captured) or click-to-jump; reads the offset at paint time |
-| **`virtual_list`** | `components::scroll` | renders only visible rows (gpui `uniform_list`), with the Ferrite scrollbar |
-| **`split`** | `components::split` | draggable 1px divider, fraction state, min sizes, double-click resets |
-| **`window_frame`** | `chrome` | Linux client-decoration frame + resize edges; passthrough elsewhere |
-| **`decrypt` / `typewriter` / `shake` / `dissolve` / `count_up` / `unroll_in`** | `components::fx` | drop-in motion effects on `animate` (DESIGN_LANGUAGE §6) |
-| **`Icon`** | `icon` | 21 pixel icons on the type grid; `fit()` for fixed-height controls |
-| **`spinner` / `cursor` / `ticker`** | `components::ticker` | timer-driven periodic state (no per-frame redraws) |
-| `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing |
+| **`Button`** | `button` | primary / secondary / ghost `[ LABEL ]` / danger; small; icon, glyph, shortcut, tooltip, loading, toggle (`selected`); disabled = dashed frame; pressed = inverse video; click flash |
+| **`checkbox` / `radio`** | `toggle` | `[x]` `[ ]` `[-]` / `(•)` `( )` display-face marks, stamped in |
+| **`switch`** | `toggle` | square thumb that travels, dithered off-track, `ON`/`OFF` readout |
+| **`segmented`** | `segmented` | one-of-few strip, selected segment inverse video; ←/→ |
+| **`slider`** | `slider` | LED-cell track snapped to `step`; drag (pointer captured), arrows/PageUp/Home/End |
+| **`tag`** | `tag` | solid (inverse video) or outline, five tones |
+| **`meter`** | `tag` | segmented LED bar, warning/danger zones, `.roll(true)` for events, `.id()` |
+| **`kbd` / `tooltip`** | `tooltip` | keycaps; square tooltip that unrolls |
+| **`spinner` / `cursor` / `ticker`** | `ticker` | timer-driven periodic state (no per-frame redraws) |
+
+### Forms
+
+| Component | Module | Notes |
+|---|---|---|
+| **`TextInput`** | `input` | single-line field on gpui's `EntityInputHandler` (IME, dead keys), grapheme/word motion, undo/redo, mouse select, `.masked()`, `.prompt(">")`; `Change` / `Submit` events |
+| **`field`** | `form` | label + control + hint or error; required mark; shakes once per *new* error; side-by-side or `.stacked()` |
+| **`select`** | `form` | value picker: sunken well + chevron, opens a menu with a check on the current option |
+| **`number_input`** | `form` | `[-] 008 [+]` stepper; range, step, digits, decimals, suffix; arrows/PageUp/Home/End |
+| **`calendar`** | `calendar` | month grid, today framed, selection inverse, min/max range, keyboard; `Date` type with civil arithmetic (no date-crate dependency) |
+| **`date_picker`** | `calendar` | field that opens a calendar; choosing closes it |
+
+### Overlays
+
+| Component | Module | Notes |
+|---|---|---|
+| **`popover`** | `overlay` | non-modal panel under a trigger, `[ TITLE ]` header, hard dithered shadow |
+| **`dropdown_menu` / `context_menu`** | `menu` | icons, shortcuts, checks, labels, separators, danger + disabled rows, nested `submenu`s, full keyboard nav |
+| **`dialog`** | `dialog` | controlled modal over a screen-doored app; Esc/Enter; `.danger()` |
+| **`drawer`** | `drawer` | controlled modal side sheet; wipes in from its edge; header, scrolling body, footer |
+| **`CommandPalette`** | `palette` | modal, fuzzy-ranked (`fuzzy`), grouped when empty, match highlights; built on `TextInput` |
+| **`Toaster` / `toast`** | `toast` | bottom-right stack; four kinds; stepped countdown paused on hover; actions |
+
+### Navigation
+
+| Component | Module | Notes |
+|---|---|---|
+| **`sidebar`** | `nav` | brand, sections, items with icons and counts, footer; `.collapsed(true)` = icon rail with tooltips |
+| **`toolbar`** | `nav` | control row on `surface`; `.separator()`, `.spacer()` |
+| **`tabs`** | `tabs` | `│ TAB │` strip; the amber edge *seeks* between tabs |
+| **`breadcrumb`** | `nav` | `src / components / menu.rs`; every crumb but the last is a link |
+| **`pagination`** | `nav` | `[<] 1 … 4 [5] 6 … 20 [>]`, constant width; ←/→ |
+| **`steps`** | `nav` | wizard progress; done steps checked and clickable, connector draws on |
+| **`accordion`** | `disclosure` | stacked sections, own open state, `.single()`; content unrolls in |
+
+### Data display
+
+| Component | Module | Notes |
+|---|---|---|
+| **`list_item`** | `list` | selectable row: amber bar + swept-in wash, icon, meta |
+| **`tree`** | `tree` | 1px connector guides, owns expansion, cascade on open; full keyboard |
+| **`table`** | `table` | sortable display-face header, right-aligned numbers, row selection |
+| **`virtual_list`** | `scroll` | renders only visible rows (gpui `uniform_list`); rows are full-width click targets |
+| **`property_list`** | `display` | key/value rows for inspectors; values can be any element |
+| **`stat`** | `display` | KPI tile: label, value that decrypts in, ▲/▼ delta (`.lower_is_better()`), sparkline |
+| **`avatar`** | `display` | 5×5 mirror identicon from the name, or initials; presence square |
+| **`timeline`** | `display` | activity feed on a 1px rail; cascades in, pings the newest marker |
+| **`alert`** | `feedback` | inline callout: tone bar, icon, decrypting title, message, actions, dismiss |
+| **`skeleton` / `skeleton_text`** | `feedback` | loading placeholder: light dither + a stepped scan band (timer, not per-frame) |
+
+### Charts
+
+| Component | Module | Notes |
+|---|---|---|
+| **`line_chart`** | `chart` | stepped line on the pixel grid, dithered area, dim comparison series, axis labels, hover crosshair + readout; draws on once |
+| **`bar_chart`** | `chart` | labelled bars that grow in; hover inverts and shows the value; `.highlight(i)` |
+| **`sparkline`** | `chart` | inline bars, the latest in amber |
+| **`heatmap`** | `chart` | grid whose dither *density* is the value; row labels; `LESS ░▒▓█ MORE` legend |
+
+### Layout and framing
+
+| Component | Module | Notes |
+|---|---|---|
+| **`scroll_area` / `scrollbar`** | `scroll` | square thumb on a hairline track; drag or click-to-jump |
+| **`split`** | `split` | draggable 1px divider, fraction state, min sizes, double-click resets |
+| **`TitleBar` / `window_frame`** | `chrome` | self-drawn square chrome on Windows/Linux, native lights on macOS; Linux resize edges |
+| `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing; status-bar segments decrypt on change, `*_live` segments don't |
+| `Icon` | `icon` | 32 pixel icons on the type grid; `fit()` for fixed-height controls |
 | `Dither` | `dither` | the texture primitive |
 
-Every interactive component carries the behaviour ported from
-gpui-component: its own focus handle, Tab-order participation, Enter/Space
-activation (gpui's keyboard click), no focus-steal on mouse down, a
-keyboard-only focus frame (`focus_visible`), and an accessibility
-role/label/toggled state.
+### Motion (drop-in effects, `fx`)
 
-**Known gaps:**
-- gpui exposes no accessibility "disabled" state. Disabled controls drop out
-  of the tab order and ignore input, but screen readers aren't told they're
-  disabled.
-- gpui has no focus scope, so a `dialog` can't trap Tab: it can walk out to
-  elements behind the backdrop (which still can't be clicked).
+`decrypt`, `typewriter`, `shake`, `dissolve`, `count_up`, `unroll_in`,
+`develop`, `afterglow`, `interlace_in`, `tear`, `ping`, `power_on_in`,
+`wipe_in`, `scan`, `flash`, `cascade_in`. What each is for:
+DESIGN_LANGUAGE §6.1. The engine underneath is `animate`.
 
-## Replacement log
+## Behaviour every interactive component carries
 
-| # | gpui-component piece | Ferrite replacement |
-|---|---|---|
-| 1 | `window_border` (Linux CSD) | `chrome::window_frame` — square frame + resize edges (unverified on Linux) |
-| 2 | `Button` | `Button` |
-| 3 | `Switch` / `Checkbox` / `Radio` | `switch` / `checkbox` / `radio` |
-| 4 | `Tag` / `Badge` | `tag` (+ `meter`) |
-| 5 | `Tooltip` / `Popover` / menus | `tooltip`, `popover`, `dropdown_menu` / `context_menu` + `submenu` |
-| 6 | `Tab` / `TabBar` | `tabs` (+ `list_item`) |
-| 7 | `Input` | `TextInput` — gpui's own IME plumbing, undo, word motion, mask |
-| 8 | `Dialog` / `Slider` / `Tree` / `Table` | `dialog`, `slider`, `tree`, `table` (+ `segmented`) |
-| 9 | `Scrollbar` / `Scrollable` | `scrollbar`, `scroll_area` |
-| 10 | `VirtualList` / virtual table | `virtual_list` (gpui's `uniform_list` + Ferrite scrollbar) |
-| 11 | `Resizable` | `split` |
-| 12 | `Notification` | `Toaster` / `toast` |
-| 13 | `Root` + `ThemeConfig` | nothing — your view is the window root; `theme.rs` owns appearance |
+Its own focus handle in keyed state, Tab-order participation, Enter/Space
+activation (gpui's keyboard click), no focus-steal on mouse down (composite
+controls take focus on click instead, PITFALLS §32), a keyboard-only focus
+frame (`focus_visible`), and an accessibility role, label and state.
+All are **controlled** where they hold a value (the app owns it, the
+handler receives the new one); components own only incidental state
+(which tree branches or accordion sections are open, the shown month).
 
-Not replaced because Ferrite never used them: docking, charts, the code
-editor, date pickers. Build them natively when an app needs one.
+## Known gaps
+
+- gpui exposes no accessibility "disabled" state. Disabled controls leave
+  the tab order and ignore input, but screen readers aren't told.
+- gpui has no focus scope, so `dialog` and `drawer` can't trap Tab.
+- No multi-line text editor yet; see [ROADMAP.md](ROADMAP.md).
 
 ## Rules for writing a native component
 
-1. **Colors from `palette(cx)` only.** No hex in components.
+1. **Colors from `palette(cx)` only.** No hex in components; they must look
+   right in every scheme (`schemes::SCHEMES`), so check a new one in at
+   least Ferrite, Mono and one wild scheme, dark and light.
 2. **Display text through `.display(Scale, window)`**, body through
-   `.body(size)`. Never raw font sizes on the display face.
+   `.body(size)`. Any new display-face glyph goes in the
+   `fonts::tests` tripwire.
 3. **0px radius, no shadow.** Depth via surface steps and 1px lines.
 4. **Builder API** in the established shape (`Button::new(id).label(..)
-   .primary()`), and if it takes `Styled`, apply the caller's style first
+   .primary()`); if it takes `Styled`, apply the caller's style first
    (PITFALLS §35).
-5. **Stepped or instant motion** from `motion::*`; honour `motion::reduced`.
+5. **Motion from `animate`/`motion` only**, entrances not exits, events not
+   live data, keyed clips namespaced by the component's id.
 6. **Interactive ⇒ stable `ElementId` + visible focus** (1px accent).
-7. **Ship it in the showcase** in the same commit, next to the
-   gpui-component version it replaces, so the difference is visible.
-8. **Platform behaviour is copied, not re-invented.** When replacing a
-   library component, port its platform handling (and the reasons, into
-   PITFALLS.md) before restyling it — `chrome::TitleBar` is the model.
+7. **Pure logic in pure functions with tests** (ranges, paging, dates,
+   snapping) — the GUI can't be unit-tested, the arithmetic can.
+8. **Ship it in the components gallery** in the same commit.
 
-## Exit criteria for dropping gpui-component
+## History: leaving gpui-component
 
-- Items 1–6 above are native and used by every Ferrite app.
-- Remaining library use is confined to `Input`, `List`/`Table`, `Dock`, and
-  is behind thin Ferrite wrappers, so a future swap touches one crate.
-- At that point gpui-component becomes an optional feature of this crate
-  rather than a hard dependency.
+Ferrite started on [gpui-component](https://github.com/longbridge/gpui-component)
+and replaced it piece by piece (window border, button, toggles, tags,
+tooltip/popover/menus, tabs, input, dialog/slider/tree/table, scrolling,
+virtual list, resizable, notifications, `Root` + theme). Behaviour that was
+hard-won there (focus handling, keyboard activation, overlay dismissal, the
+title bar's platform quirks) was ported, not reinvented; the module docs say
+what came from where. The dependency is gone.

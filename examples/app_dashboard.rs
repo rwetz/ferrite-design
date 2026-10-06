@@ -288,10 +288,8 @@ impl Render for Dashboard {
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
         ferrite_design::init(Appearance::Dark, cx);
-        // FERRITE_SCHEME=harbor|mono|phosphor|… starts in another color scheme.
-        if let Some(scheme) = std::env::var("FERRITE_SCHEME").ok().and_then(|k| ferrite_design::schemes::by_key(&k)) {
-            ferrite_design::theme::set_scheme(scheme, cx);
-        }
+        // FERRITE_SCHEME / FERRITE_APPEARANCE / FERRITE_FPS, for trying other looks.
+        theme::apply_env(cx);
         cx.bind_keys([KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
         let options = chrome::window_options("Pulse", size(px(1280.), px(860.)), cx);
         cx.open_window(options, |window, cx| {

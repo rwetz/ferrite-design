@@ -263,10 +263,8 @@ impl Render for Settings {
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
         ferrite_design::init(Appearance::Dark, cx);
-        // FERRITE_SCHEME=harbor|mono|phosphor|… starts in another color scheme.
-        if let Some(scheme) = std::env::var("FERRITE_SCHEME").ok().and_then(|k| ferrite_design::schemes::by_key(&k)) {
-            ferrite_design::theme::set_scheme(scheme, cx);
-        }
+        // FERRITE_SCHEME / FERRITE_APPEARANCE / FERRITE_FPS, for trying other looks.
+        theme::apply_env(cx);
         let options = chrome::window_options("Settings", size(px(960.), px(680.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);
