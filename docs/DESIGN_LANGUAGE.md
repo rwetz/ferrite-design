@@ -235,14 +235,22 @@ contained.**
 | **travel** | a part moves between two rest positions in eased whole-pixel steps | switch thumb |
 | **grow** | an indicator widens from its centre | the active tab's amber bar |
 | **step-in** | dither + 40→14→4→0px slide | toasts |
-| **count** | a number rolls to its value | totals, timings |
+| **count** | a number rolls to its value | totals, timings; meters with `.roll(true)` |
+| **flash** | a button floods ▓ with its text color, then dissolves back | every button click |
+| **stamp** | a mark arrives through two noise glyphs (`#` `*` → `x`) | checkbox, radio |
+| **sweep** | the selection wash fills left→right behind the row; the amber bar lands at once | list items, table rows, tree rows |
+| **cascade** | items decrypt in one frame apart (max 8) | tree branches opening |
+| **boot** | a header's title decrypts while its dither rule draws on | every panel and the title bar, on first appearance |
 
 ### 6.2 Rules
 
 - **Entrances animate; exits don't.** Closing is instant — the user has
   already moved on.
-- **Continuous input never animates** (hover, drag, typing, scrolling).
-  Motion marks *events*.
+- **Continuous input never animates** (hover, drag, typing, scrolling),
+  and neither does **live data** — a meter fed several times a second
+  updates instantly (`.roll(true)` is for values that change as events).
+  Motion marks *events*; something always moving is noise, and it keeps
+  the window redrawing at 25fps.
 - **One effect per event.** A dialog unrolls; it doesn't also slide and
   shake.
 - **Periodic motion runs on timers**, not repeating animations (PITFALLS

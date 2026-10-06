@@ -1055,11 +1055,7 @@ impl Render for Components {
         let data_page = self.data_page(window, cx);
         let layout_page = self.layout_page(window, cx);
         let motion_page = self.motion_page(window, cx);
-        // The last event decrypts into place each time it changes.
-        let last = ferrite_design::animate::scramble(
-            &self.last,
-            ferrite_design::animate::play_on_change("last-event", &self.last, motion::BASE, window, cx),
-        );
+
         chrome::window_frame().child(div()
             .flex()
             .flex_col()
@@ -1101,7 +1097,7 @@ impl Render for Components {
                         .when(self.page == 1, |el| el.child(unroll_in("page-1", 1, data_page)))
                         .when(self.page == 2, |el| el.child(unroll_in("page-2", 2, layout_page)))
                         .when(self.page == 3, |el| el.child(unroll_in("page-3", 3, motion_page)))
-                        .when(self.page == 0, |el| el.child(div().flex().flex_col().gap(space::ROW)
+                        .when(self.page == 0, |el| el.child(unroll_in("page-0", 0, div().flex().flex_col().gap(space::ROW)
                         .child(buttons)
                         .child(div().flex().flex_row().gap(space::ROW).child(toggles).child(status))
                         .child(div().flex().flex_row().gap(space::ROW)
@@ -1109,7 +1105,7 @@ impl Render for Components {
                             .child(div().flex_1().child(versus)))
                         .child(div().flex().flex_row().gap(space::ROW)
                             .child(div().flex_1().child(overlays))
-                            .child(div().flex_1().child(icons))))),
+                            .child(div().flex_1().child(icons)))))),
                 ),
             )
             .child(
@@ -1118,7 +1114,7 @@ impl Render for Components {
                     .tooltip(tooltip("Last event").builder())
                     .child(
                         status_bar()
-                            .left(last)
+                            .left(self.last.clone())
                             .left(if is_dark { "IRON" } else { "PAPER" })
                             .left(format!("MODE {}", MODES[self.mode].to_uppercase()))
                             .right(format!("CLICKS {}", self.clicks))

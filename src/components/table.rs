@@ -234,9 +234,7 @@ impl RenderOnce for Table {
                 .border_color(hsla(p.line))
                 .body(text::BASE)
                 .text_color(hsla(p.fg))
-                .when(active, |el| {
-                    el.bg(hsla(p.accent_dim)).child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(hsla(p.accent)))
-                })
+                .children(super::selection(format!("{}-row-{ri}", self.id), active, window, cx))
                 .when(!active, |el| el.hover(|s| s.bg(hsla(p.raised))));
             for (ci, col) in cols.iter().enumerate() {
                 let text = cells.get(ci).cloned().unwrap_or_default();

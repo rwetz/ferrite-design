@@ -187,7 +187,12 @@ impl RenderOnce for Dialog {
             .bg(hsla(p.surface))
             .border_b_1()
             .border_color(hsla(p.line))
-            .when(self.danger, |el| el.child(icon(Icon::Warning).fit(px(20.)).color(hsla(p.danger))))
+            .when(self.danger, |el| {
+                // Three hard flashes, then solid.
+                let flash = crate::animate::play("warn", 0u8, crate::motion::SLOW, window, cx);
+                let lit = flash.done || (flash.frame / 2).is_multiple_of(2);
+                el.child(div().size(px(20.)).when(lit, |el| el.child(icon(Icon::Warning).fit(px(20.)).color(hsla(p.danger)))))
+            })
             .child(
                 div()
                     .flex_none()

@@ -127,6 +127,8 @@ struct Flat<'a> {
     rails: Vec<bool>,
     last: bool,
     parent: Option<usize>,
+    /// Position among its siblings, for the appear cascade.
+    sibling: usize,
 }
 
 fn flatten<'a>(nodes: &'a [TreeNode], expanded: &HashSet<SharedString>) -> Vec<Flat<'a>> {
@@ -134,7 +136,7 @@ fn flatten<'a>(nodes: &'a [TreeNode], expanded: &HashSet<SharedString>) -> Vec<F
         for (i, node) in nodes.iter().enumerate() {
             let last = i + 1 == nodes.len();
             let index = out.len();
-            out.push(Flat { node, depth, rails: rails.to_vec(), last, parent });
+            out.push(Flat { node, depth, rails: rails.to_vec(), last, parent, sibling: i });
             if !node.children.is_empty() && expanded.contains(&node.id) {
                 let mut child_rails = rails.to_vec();
                 if depth > 0 {
@@ -268,9 +270,7 @@ impl RenderOnce for Tree {
                     .h(ROW)
                     .pl_2()
                     .pr_3()
-                    .when(active, |el| {
-                        el.bg(hsla(p.accent_dim)).child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(hsla(p.accent)))
-                    })
+                    .children(super::selection(format!("{}-{}", self.id, node.id), active, window, cx))
                     .when(!active, |el| el.hover(|s| s.bg(hsla(p.raised))))
                     .child(guides)
                     .child(div().relative().size(lead).flex_none().map(|el| {
@@ -293,7 +293,17 @@ impl RenderOnce for Tree {
                             .whitespace_nowrap()
                             .body(text::BASE)
                             .text_color(hsla(p.fg))
-                            .child(node.label.clone()),
+                            .child({
+                                let p = crate::animate::play_after(
+                                    ElementId::Name(format!("{}-in-{}", self.id, node.id).into()),
+                                    0u8,
+                                    crate::animate::stagger(row.sibling),
+                                    crate::motion::BASE,
+                                    window,
+                                    cx,
+                                );
+                                crate::animate::scramble(&node.label, p)
+                            }),
                     )
                     .when_some(node.meta.clone(), |el, m| el.child(div().body(text::XS).text_color(hsla(p.fg_faint)).child(m)))
                     .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())

@@ -380,7 +380,15 @@ impl Render for Toaster {
                                         .gap_2()
                                         .min_h(lead)
                                         .child(div().display(Scale::X1, window).text_color(tone_text).child(t.kind.code()))
-                                        .child(div().flex_1().min_w_0().body(text::BASE).text_color(hsla(p.fg)).child(t.title.clone())),
+                                        .child(div().flex_1().min_w_0().body(text::BASE).text_color(hsla(p.fg)).child({
+                                            let age = live.born.elapsed();
+                                            let p = crate::animate::Progress {
+                                                t: crate::animate::quantise(age, crate::motion::BASE),
+                                                frame: (age.as_millis() / crate::motion::FRAME.as_millis()) as u32,
+                                                done: age >= crate::motion::BASE || reduced,
+                                            };
+                                            crate::animate::scramble(&t.title, p)
+                                        })),
                                 )
                                 .when_some(t.message.clone(), |el, m| {
                                     el.child(div().body(text::SM).text_color(hsla(p.fg_dim)).child(m))

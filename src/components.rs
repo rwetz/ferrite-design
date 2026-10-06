@@ -95,6 +95,8 @@ impl Styled for Panel {
 impl RenderOnce for Panel {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
+        // Headers boot when a panel first appears.
+        let boot = crate::animate::play(gpui::ElementId::Name(format!("panel-{}", self.title).into()), 0u8, crate::motion::SLOW, window, cx);
         // Caller's style (size, flex) first, the frame on top — assigning the
         // style afterwards would wipe the frame (PITFALLS §35).
         let mut root = div();
@@ -119,15 +121,38 @@ impl RenderOnce for Panel {
                     div()
                         .display(Scale::X1, window)
                         .text_color(hsla(p.fg))
-                        .child(format!("[ {} ]", self.title.to_uppercase())),
+                        .child(crate::animate::scramble(&format!("[ {} ]", self.title.to_uppercase()), boot)),
                 )
-                .child(dither(dither::flat(dither::level::LIGHT)).ink(hsla(p.line_strong)).flex_1().h(px(8.)))
+                // The rule draws on left→right as the title locks in.
+                .child(div().flex_1().h(px(8.)).child(dither(dither::flat(dither::level::LIGHT)).ink(hsla(p.line_strong)).h_full().w(relative(boot.eased()))))
                 .when_some(self.meta, |this, meta| {
                     this.child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(meta))
                 }),
         )
         .child(div().flex().flex_col().flex_1().min_h_0().p_3().gap_2().children(self.children))
     }
+}
+
+// ── Selection ─────────────────────────────────────────────────────────────
+
+/// The selected-row treatment, animated: the 2px amber bar lands at once and
+/// the `accent_dim` wash sweeps in left→right behind the content when a row
+/// becomes selected. Add it as the row's *first* child (it's absolute, so
+/// content paints over it). `key` must be unique among sibling rows.
+pub(crate) fn selection(key: impl Into<SharedString>, selected: bool, window: &mut Window, cx: &mut App) -> Option<gpui::Div> {
+    let p = palette(cx);
+    let key: SharedString = key.into();
+    let t = crate::animate::play_on_change(gpui::ElementId::Name(format!("sel-{key}").into()), selected, crate::motion::BASE, window, cx).eased();
+    selected.then(|| {
+        div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .bottom_0()
+            .w(relative(t))
+            .bg(hsla(p.accent_dim))
+            .child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(hsla(p.accent)))
+    })
 }
 
 // ── Rule ──────────────────────────────────────────────────────────────────
@@ -177,16 +202,20 @@ impl StatusBar {
 impl RenderOnce for StatusBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
-        let segments = |items: Vec<SharedString>, window: &Window| {
+        // Each segment decrypts into place whenever its text changes.
+        let segments = |side: &str, items: Vec<SharedString>, window: &mut Window, cx: &mut App| {
             let mut row = div().flex().flex_row().items_center().gap_2();
             for (i, item) in items.into_iter().enumerate() {
                 if i > 0 {
                     row = row.child(div().display(Scale::X1, window).text_color(hsla(p.fg_faint)).child("│"));
                 }
-                row = row.child(div().display(Scale::X1, window).child(item));
+                let t = crate::animate::play_on_change(gpui::ElementId::Name(format!("status-{side}-{i}").into()), &item, crate::motion::BASE, window, cx);
+                row = row.child(div().display(Scale::X1, window).child(crate::animate::scramble(&item, t)));
             }
             row
         };
+        let left = segments("l", self.left, window, cx);
+        let right = segments("r", self.right, window, cx);
         div()
             .flex()
             .flex_row()
@@ -199,8 +228,8 @@ impl RenderOnce for StatusBar {
             .border_t_1()
             .border_color(hsla(p.line))
             .text_color(hsla(p.fg_dim))
-            .child(segments(self.left, window))
-            .child(segments(self.right, window))
+            .child(left)
+            .child(right)
     }
 }
 

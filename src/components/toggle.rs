@@ -102,6 +102,15 @@ impl RenderOnce for Toggle {
             _ => " ",
         };
         let on = self.checked || mixed;
+        // The mark stamps in through two noise glyphs when it changes.
+        let stamp = crate::animate::play_on_change(
+            ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "stamp".into()),
+            (self.checked, mixed),
+            crate::motion::FAST,
+            window,
+            cx,
+        );
+        let mark = if on { crate::animate::stamp(mark, stamp) } else { mark };
         let next = match self.kind {
             Kind::Checkbox => mixed || !self.checked,
             Kind::Radio => true,
@@ -257,7 +266,11 @@ impl RenderOnce for Switch {
                     // ON/OFF never reflows the label beside it.
                     .w(display_size(Scale::X1, window) * 1.5)
                     .text_color(hsla(if self.disabled { p.fg_faint } else if on { p.accent_text } else { p.fg_dim }))
-                    .child(if on { "ON" } else { "OFF" }),
+                    .child({
+                        let text = if on { "ON" } else { "OFF" };
+                        let p = crate::animate::play_on_change(ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "readout".into()), on, crate::motion::FAST, window, cx);
+                        crate::animate::scramble(text, p)
+                    }),
             )
             .when_some(self.label, |el, l| {
                 el.child(div().body(text::BASE).text_color(hsla(if self.disabled { p.fg_faint } else { p.fg })).child(l))

@@ -104,10 +104,11 @@ pub struct Meter {
     critical: f32,
     label: Option<SharedString>,
     show_value: bool,
+    roll: bool,
 }
 
 pub fn meter(value: f32) -> Meter {
-    Meter { value, segments: 20, warn: 0.7, critical: 0.9, label: None, show_value: true }
+    Meter { value, segments: 20, warn: 0.7, critical: 0.9, label: None, show_value: true, roll: false }
 }
 
 impl Meter {
@@ -133,6 +134,16 @@ impl Meter {
         self.show_value = false;
         self
     }
+
+    /// Roll to new values segment by segment instead of jumping. For values
+    /// that change as *events* (a job finishing, a quota used). Leave it off
+    /// for live feeds that update several times a second: continuous data
+    /// doesn't animate (DESIGN_LANGUAGE §6.2), and a meter that's always
+    /// rolling keeps the window redrawing at 25fps.
+    pub fn roll(mut self, roll: bool) -> Self {
+        self.roll = roll;
+        self
+    }
 }
 
 /// How many of `segments` are lit for `value`. Rounds, so a meter never
@@ -149,10 +160,38 @@ pub fn lit_segments(value: f32, segments: u32) -> u32 {
     }
 }
 
+/// Where a meter is rolling from / to.
+struct Roll {
+    from: f32,
+    to: f32,
+}
+
 impl RenderOnce for Meter {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
-        let lit = lit_segments(self.value, self.segments);
+        // Roll to the new value segment by segment (LED-style) instead of
+        // jumping. Keyed by label: give meters in one view distinct labels.
+        let key = format!("meter-{}", self.label.clone().unwrap_or_default());
+        let value = self.value.clamp(0., 1.);
+        let roll = window.use_keyed_state(gpui::ElementId::Name(format!("{key}-roll").into()), cx, move |_, _| Roll { from: value, to: value });
+        // Without `roll`, the clip never changes key, so it never runs.
+        let clip_key = if self.roll { value.to_bits() } else { 0 };
+        let t = crate::animate::play_on_change(gpui::ElementId::Name(key.into()), clip_key, crate::motion::SLOW, window, cx);
+        if roll.read(cx).to != value {
+            let (from, to) = (roll.read(cx).from, roll.read(cx).to);
+            let showing = crate::animate::count(from, to, t);
+            roll.update(cx, |r, _| {
+                r.from = if t.done { to } else { showing };
+                r.to = value;
+            });
+        }
+        let shown = if self.roll {
+            let r = roll.read(cx);
+            crate::animate::count(r.from, r.to, t)
+        } else {
+            value
+        };
+        let lit = lit_segments(shown, self.segments);
         let n = self.segments;
         div()
             .flex()
@@ -180,7 +219,7 @@ impl RenderOnce for Meter {
                     div()
                         .body(text::SM)
                         .text_color(hsla(p.fg))
-                        .child(format!("{:>3}%", (self.value.clamp(0.0, 1.0) * 100.0).round() as u32)),
+                        .child(format!("{:>3}%", (shown * 100.0).round() as u32)),
                 )
             })
     }

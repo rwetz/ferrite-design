@@ -74,6 +74,7 @@ impl Progress {
 struct Clip {
     key: u64,
     start: Instant,
+    delay: Duration,
     duration: Duration,
     _task: Option<Task<()>>,
 }
@@ -85,7 +86,7 @@ fn hash_of(key: impl Hash) -> u64 {
 }
 
 fn progress(clip: &Clip) -> Progress {
-    let elapsed = clip.start.elapsed();
+    let elapsed = clip.start.elapsed().saturating_sub(clip.delay);
     let t = quantise(elapsed, clip.duration);
     let frame = (elapsed.as_secs_f32() / motion::FRAME.as_secs_f32()).floor() as u32;
     Progress { t, frame, done: t >= 1. }
@@ -98,7 +99,8 @@ fn run(cx: &mut gpui::Context<Clip>) -> Task<()> {
             cx.background_executor().timer(motion::FRAME).await;
             let done = this.update(cx, |clip, cx| {
                 cx.notify();
-                progress(clip).done
+                // Done only once the delay has passed too.
+                clip.start.elapsed() >= clip.delay && progress(clip).done
             });
             if !matches!(done, Ok(false)) {
                 break;
@@ -107,18 +109,19 @@ fn run(cx: &mut gpui::Context<Clip>) -> Task<()> {
     })
 }
 
-fn clip(id: impl Into<ElementId>, key: u64, duration: Duration, play_now: bool, window: &mut Window, cx: &mut App) -> Progress {
+fn clip(id: impl Into<ElementId>, key: u64, delay: Duration, duration: Duration, play_now: bool, window: &mut Window, cx: &mut App) -> Progress {
     if motion::reduced(cx) {
         return Progress::DONE;
     }
     let state = window.use_keyed_state(id, cx, move |_, cx| {
-        let start = if play_now { Instant::now() } else { Instant::now() - duration * 2 };
-        Clip { key, start, duration, _task: play_now.then(|| run(cx)) }
+        let start = if play_now { Instant::now() } else { Instant::now() - (delay + duration) * 2 };
+        Clip { key, start, delay, duration, _task: play_now.then(|| run(cx)) }
     });
     if state.read(cx).key != key {
         state.update(cx, |c, cx| {
             c.key = key;
             c.start = Instant::now();
+            c.delay = delay;
             c.duration = duration;
             c._task = Some(run(cx));
         });
@@ -130,13 +133,33 @@ fn clip(id: impl Into<ElementId>, key: u64, duration: Duration, play_now: bool, 
 /// whenever `key` changes. Call while rendering; the view re-renders each
 /// frame until it finishes.
 pub fn play(id: impl Into<ElementId>, key: impl Hash, duration: Duration, window: &mut Window, cx: &mut App) -> Progress {
-    clip(id, hash_of(key), duration, true, window, cx)
+    clip(id, hash_of(key), Duration::ZERO, duration, true, window, cx)
+}
+
+/// [`play`] after holding at the start for `delay` — for cascades, where
+/// each item waits a frame or two longer than the one before it
+/// (see [`stagger`]).
+pub fn play_after(id: impl Into<ElementId>, key: impl Hash, delay: Duration, duration: Duration, window: &mut Window, cx: &mut App) -> Progress {
+    clip(id, hash_of(key), delay, duration, true, window, cx)
+}
+
+/// The delay for the `i`th item of a cascade: one frame apart, capped so a
+/// long list still finishes inside the contained window.
+pub fn stagger(i: usize) -> Duration {
+    motion::FRAME * (i.min(8) as u32)
 }
 
 /// Like [`play`], but starts finished: it only plays when `key` changes.
 /// For state transitions that shouldn't animate on first render.
 pub fn play_on_change(id: impl Into<ElementId>, key: impl Hash, duration: Duration, window: &mut Window, cx: &mut App) -> Progress {
-    clip(id, hash_of(key), duration, false, window, cx)
+    clip(id, hash_of(key), Duration::ZERO, duration, false, window, cx)
+}
+
+/// A glyph for "stamping" a mark into place: two frames of noise, then the
+/// mark. For checkboxes, radios — anything that flips between two glyphs.
+pub fn stamp(mark: &'static str, p: Progress) -> &'static str {
+    const NOISE: [&str; 3] = ["#", "*", "+"];
+    if p.done { mark } else { NOISE[(p.frame as usize).min(NOISE.len() - 1)] }
 }
 
 // ── Effects (pure) ────────────────────────────────────────────────────────

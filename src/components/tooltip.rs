@@ -79,9 +79,10 @@ impl Tooltip {
 }
 
 impl Render for Tooltip {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
-        div()
+        let open = crate::animate::play("tip", 0u8, crate::motion::FAST, window, cx);
+        let tip = div()
             .flex()
             .flex_row()
             .items_center()
@@ -94,6 +95,7 @@ impl Render for Tooltip {
             .text_color(hsla(p.fg))
             .body(text::SM)
             .child(self.text.clone())
-            .when_some(self.kbd.clone(), |el, k| el.child(kbd(&k)))
+            .when_some(self.kbd.clone(), |el, k| el.child(kbd(&k)));
+        crate::animate::unroll(tip, open.eased()).edge(hsla(p.accent))
     }
 }

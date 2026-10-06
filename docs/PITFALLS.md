@@ -384,3 +384,14 @@ helpers also sleep afterwards, so by the first capture a 200ms open
 animation is nearly done. Post the raw input yourself and grab immediately
 in a loop to see the intermediate frames.
 
+## 40. Measure idle CPU before and after motion work
+
+Every running clip redraws the whole window at 25fps. One clip at a time
+is nothing; something that *keeps* restarting a clip is a 25fps animation
+loop. The first cut rolled the gallery's meters on every 500ms data update
+and pushed idle CPU from 17% to 30% of a core. Live data now doesn't
+animate (DESIGN_LANGUAGE §6.2). Check with the process's CPU time over a
+few seconds, on the busiest page, against the previous commit — the
+gallery's debug-build baseline is ~17% (its 10fps spinner re-renders
+the whole view).
+

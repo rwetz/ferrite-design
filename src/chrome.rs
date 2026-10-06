@@ -105,6 +105,8 @@ struct DragState {
 impl RenderOnce for TitleBar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
+        // The mark types on and the title decrypts when the window opens.
+        let boot = crate::animate::play("title-boot", 0u8, crate::motion::SLOW, window, cx);
         let state = window.use_state(cx, |_, _| DragState { should_move: false });
         let client_decorated = matches!(window.window_decorations(), Decorations::Client { .. });
 
@@ -157,13 +159,13 @@ impl RenderOnce for TitleBar {
                         div()
                             .display(Scale::X1, window)
                             .text_color(hsla(p.accent))
-                            .child("▓▒░"),
+                            .child(crate::animate::type_on("▓▒░", boot).replace('█', "▓")),
                     )
                     .child(
                         div()
                             .display(Scale::X1, window)
                             .text_color(hsla(p.fg))
-                            .child(self.title.to_uppercase()),
+                            .child(crate::animate::scramble(&self.title.to_uppercase(), boot)),
                     )
                     .children(self.children)
                     // The rest of the bar is a quiet dither strip: the grip.

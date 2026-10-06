@@ -87,6 +87,7 @@ impl RenderOnce for Segmented {
         let len = self.options.len();
         let selected = self.selected.min(len.saturating_sub(1));
         let handler = self.on_select.filter(|_| !self.disabled);
+        let grow = crate::animate::play_on_change(ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "grow".into()), selected, crate::motion::FAST, window, cx).eased();
 
         let mut strip = div()
             .id(self.id.clone())
@@ -141,7 +142,13 @@ impl RenderOnce for Segmented {
                     .h_full()
                     .px_3()
                     .when(i > 0, |el| el.border_l_1().border_color(hsla(p.line_strong)))
-                    .when_some(bg, |el, bg| el.bg(hsla(bg)))
+                    .relative()
+                    .when_some(bg, |el, bg| {
+                        // The selection block grows out from the segment's
+                        // centre when it lands here.
+                        let w = if on { grow } else { 1. };
+                        el.child(div().absolute().top_0().bottom_0().left(gpui::relative((1. - w) / 2.)).w(gpui::relative(w)).bg(hsla(bg)))
+                    })
                     .text_color(hsla(ink))
                     .when(!self.disabled && !on, |el| el.hover(|s| s.bg(hsla(p.raised)).text_color(hsla(p.fg))))
                     .when_some(glyph, |el, g| el.child(icon(g).fit(px(22.)).color(hsla(ink))))

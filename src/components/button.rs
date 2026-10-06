@@ -273,6 +273,21 @@ impl RenderOnce for Button {
 
         let on_click = self.on_click.clone();
 
+        // Click acknowledgement: the button floods with its text color and
+        // dissolves back through the Bayer ramp in three frames.
+        let acks = window.use_keyed_state(ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "acks".into()), cx, |_, _| 0u32);
+        let ack = crate::animate::play_on_change(
+            ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "ack".into()),
+            *acks.read(cx),
+            crate::motion::FAST,
+            window,
+            cx,
+        );
+        // Capped at ▓ (75%) so the label still reads through the flash.
+        let flash = (!ack.done)
+            .then(|| (crate::animate::dissolve_level(ack) * crate::dither::level::DARK * 16.).round() / 16.)
+            .filter(|l| *l > 0.);
+
         div()
             .id(self.id.clone())
             .group(group.clone())
@@ -322,7 +337,21 @@ impl RenderOnce for Button {
                 el.on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
             })
             .when_some(on_click.filter(|_| interactive), |el, handler| {
-                el.on_click(move |event, window, cx| handler(event, window, cx))
+                el.on_click(move |event, window, cx| {
+                    acks.update(cx, |n, cx| {
+                        *n += 1;
+                        cx.notify();
+                    });
+                    handler(event, window, cx)
+                })
+            })
+            .when_some(flash, |el, level| {
+                el.relative().child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .child(crate::dither::dither(crate::dither::flat(level)).ink(hsla(base.fg)).size_full()),
+                )
             })
             .when_some(self.tooltip.clone(), |el, text| {
                 let t = tooltip(text);

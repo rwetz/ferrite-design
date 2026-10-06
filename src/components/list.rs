@@ -96,11 +96,7 @@ impl RenderOnce for ListItem {
             .text_color(hsla(ink))
             .border_1()
             .border_color(gpui::transparent_black())
-            .when(self.selected, |el| {
-                el.bg(hsla(p.accent_dim)).child(
-                    div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(hsla(p.accent)),
-                )
-            })
+            .children(super::selection(format!("list-{}", self.id), self.selected, window, cx))
             .when(!self.selected && !self.disabled, |el| el.hover(|s| s.bg(hsla(p.raised))))
             .when(!self.disabled, |el| el.focus_visible(|s| s.border_color(hsla(p.accent))))
             .when_some(self.icon, |el, i| {
