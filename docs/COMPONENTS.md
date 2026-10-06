@@ -85,13 +85,21 @@ with a scheme picker), and whole apps built from them in `examples/app_*.rs`.
 
 | Component | Module | Notes |
 |---|---|---|
-| **`ascii_box`** | `textmode` | real box-glyph frame, single or `.double()`, title in the edge, any size (edges clipped to the box) |
+| **`ascii_box`** | `textmode` | real box-glyph frame in five styles (`.double()`, `.style(ascii::DOUBLE_H / DOUBLE_V / PLAIN)`), title in the edge, any size; `.shadow()` for a DOS drop shadow, `.draw_on(id, key)` to trace the frame on |
 | **`ascii_rule`** | `textmode` | `── LABEL ───` across the width |
-| **`banner`** | `textmode` | 5×5 block letters as quads, wiped on |
+| **`banner`** | `textmode` | 5×5 block letters as quads, wiped on; `.shadow()` |
 | **`ascii_art`** | `textmode` | a `Picture` as characters, any ramp (`ascii::CLASSIC`, `BUBBLES`) |
 | **`ascii_gauge`** | `textmode` | `[████▒·····] 42%`; live-data safe |
 | **`mark`** | `textmode` | the `▓▒░` mark as real dither |
-| `spinner(..).frames(..)` | `ticker` | `ascii::spinners::{LINE, SHADE, DOTS, PULSE, BOUNCE}` |
+| **`ascii_table`** | `textmode` | boxed text grid with junctions, numbers right-aligned, `.selected(row)` |
+| **`ascii_tree`** | `textmode` | `├──` / `└──` outline, `tree`-command style |
+| **`ascii_plot`** | `textmode` | `*` line plot joined with `:`, labelled axis |
+| **`ascii_bars`** | `textmode` | labelled horizontal bars, gauge fills, readouts |
+| **`ascii_cal`** | `textmode` | a month as `cal` prints it, today in inverse amber |
+| **`marquee`** | `textmode` | looping ticker on a timer (one per screen) |
+| **`ascii_button`** | `textmode` | `< OK >`; `.primary()` is inverse amber |
+| **`ascii_list`** | `textmode` | `► ITEM` pick list, click to select |
+| `spinner(..).frames(..)` | `ticker` | `ascii::spinners::{LINE, SHADE, DOTS, PULSE, BOUNCE, ARROWS, BAR, GROW, SUITS}` |
 
 ### Layout and framing
 

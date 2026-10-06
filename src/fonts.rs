@@ -176,6 +176,11 @@ mod tests {
             "▀▄█",               // banner half blocks
             " .:-=+*#%@oO",      // ascii::CLASSIC and BUBBLES art ramps
             "·•●",               // pulse / dots spinners, gauge track
+            "┬┴├┤┼╦╩╠╣╬",        // ascii::table junctions, single and double
+            "╒╕╘╛╤╧╞╡╪",         // ascii::DOUBLE_H
+            "╓╖╙╜╥╨╟╢╫",         // ascii::DOUBLE_V
+            "►<>:*",             // ascii_list cursor, buttons, plot marks
+            "←↑→↓♠♣♥♦[]=@Oo",    // ascii::spinners ARROWS, SUITS, BAR, GROW
         );
         let missing: String = used.chars().filter(|c| !display_has(*c)).collect();
         assert!(missing.is_empty(), "display face lacks: {missing:?}");

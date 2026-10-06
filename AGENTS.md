@@ -234,7 +234,12 @@ sparkline(values).size(px(120.), px(20.))      heatmap(rows_0_to_1).row_labels([
 
 // Text mode (ASCII) — one framing style per screen: these, or panel()
 ascii_box().title("System").double().ink(hsla(p.accent)).child(..)    ascii_rule(Some("logs")).double()
-banner(id, "FERRITE")    ascii_art(picture).cols(48).ramp(&ascii::BUBBLES)    ascii_gauge(0.42).label("cpu").cells(12)
+banner(id, "FERRITE").shadow()    ascii_art(picture).cols(48).ramp(&ascii::BUBBLES)    ascii_gauge(0.42).label("cpu").cells(12)
+ascii_box().style(ascii::DOUBLE_H).shadow().draw_on(id, key)      // styles: SINGLE DOUBLE DOUBLE_H DOUBLE_V PLAIN
+ascii_table().header(["name", "pid"]).row(["cargo", "9021"]).selected(Some(0))    ascii_tree().item(0, "src/").item(1, "lib.rs")
+ascii_plot(values).size(48, 8).format(|v| format!("{v:.0}MS"))    ascii_bars().bar("mon", 12.).cells(24)    ascii_cal(2026, 10).today(Some(6))
+marquee(id, "NOW PLAYING …").cells(32)    ascii_button(id, "Ok").primary().on_click(..)    ascii_list(id).item("Quick").selected(Some(0)).on_select(..)
+ascii::table(..) ascii::tree(..) ascii::plot(..) ascii::cal(..) ascii::frame(lines, ascii::PLAIN, Some("t"))   // the same, as plain strings
 spinner(id).frames(ascii::spinners::DOTS)    mark()    ascii::gauge(0.4, 10)  ascii::box_edge(ascii::SINGLE, 20, true, Some("t"))
 
 // Framing, type, color

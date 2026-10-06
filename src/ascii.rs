@@ -91,12 +91,34 @@ pub struct BoxStyle {
     pub tr: char,
     pub bl: char,
     pub br: char,
+    /// Junctions, for grids: `┬` `┴` `├` `┤` `┼`.
+    pub down: char,
+    pub up: char,
+    pub right: char,
+    pub left: char,
+    pub cross: char,
 }
 
 /// `┌─┐ │ └─┘` — the default.
-pub const SINGLE: BoxStyle = BoxStyle { h: '─', v: '│', tl: '┌', tr: '┐', bl: '└', br: '┘' };
+pub const SINGLE: BoxStyle =
+    BoxStyle { h: '─', v: '│', tl: '┌', tr: '┐', bl: '└', br: '┘', down: '┬', up: '┴', right: '├', left: '┤', cross: '┼' };
 /// `╔═╗ ║ ╚═╝` — emphasis: the focused or primary box, a modal.
-pub const DOUBLE: BoxStyle = BoxStyle { h: '═', v: '║', tl: '╔', tr: '╗', bl: '╚', br: '╝' };
+pub const DOUBLE: BoxStyle =
+    BoxStyle { h: '═', v: '║', tl: '╔', tr: '╗', bl: '╚', br: '╝', down: '╦', up: '╩', right: '╠', left: '╣', cross: '╬' };
+/// `╒═╕ │ ╘═╛` — double rules, single sides: a header block, a ledger.
+pub const DOUBLE_H: BoxStyle =
+    BoxStyle { h: '═', v: '│', tl: '╒', tr: '╕', bl: '╘', br: '╛', down: '╤', up: '╧', right: '╞', left: '╡', cross: '╪' };
+/// `╓─╖ ║ ╙─╜` — single rules, double sides: a column, a sidebar.
+pub const DOUBLE_V: BoxStyle =
+    BoxStyle { h: '─', v: '║', tl: '╓', tr: '╖', bl: '╙', br: '╜', down: '╥', up: '╨', right: '╟', left: '╢', cross: '╫' };
+/// `+-+ | +-+` — plain ASCII, for text that leaves the app: logs, the
+/// clipboard, a terminal.
+pub const PLAIN: BoxStyle =
+    BoxStyle { h: '-', v: '|', tl: '+', tr: '+', bl: '+', br: '+', down: '+', up: '+', right: '+', left: '+', cross: '+' };
+
+/// Every box style, for pickers and demos.
+pub const STYLES: [(&str, BoxStyle); 5] =
+    [("single", SINGLE), ("double", DOUBLE), ("double_h", DOUBLE_H), ("double_v", DOUBLE_V), ("plain", PLAIN)];
 
 /// One line of a box `cols` cells wide: `┌──────┐`, optionally with a
 /// `[ TITLE ]` set into it after two rule cells. Exactly `cols` chars.
@@ -248,6 +270,14 @@ pub mod spinners {
     pub const PULSE: &[&str] = &["·", "•", "●", "•"];
     /// A block bouncing along a four-cell track.
     pub const BOUNCE: &[&str] = &["█···", "·█··", "··█·", "···█", "··█·", "·█··"];
+    /// An arrow going round.
+    pub const ARROWS: &[&str] = &["←", "↑", "→", "↓"];
+    /// A bar filling and draining in a bracket.
+    pub const BAR: &[&str] = &["[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]"];
+    /// A dot swelling and shrinking.
+    pub const GROW: &[&str] = &[".", "o", "O", "@", "O", "o"];
+    /// A diamond flipping between suits.
+    pub const SUITS: &[&str] = &["♠", "♣", "♥", "♦"];
 }
 
 #[cfg(test)]
@@ -321,3 +351,223 @@ mod tests {
         assert_eq!(rule("io", 12).chars().count(), 12);
     }
 }
+
+// ── Grids: tables, trees, plots, calendars ────────────────────────────────
+
+/// Pad or cut `text` to exactly `width` characters, right-aligned if `right`.
+fn fit(text: &str, width: usize, right: bool) -> String {
+    let t: String = text.chars().take(width).collect();
+    let pad = width - t.chars().count();
+    if right { format!("{}{t}", " ".repeat(pad)) } else { format!("{t}{}", " ".repeat(pad)) }
+}
+
+/// Numbers (and readings like `12.4%`, `188 MB`) right-align in a column.
+fn numeric(cell: &str) -> bool {
+    cell.trim_start().starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '+' || c == '.')
+}
+
+/// A text table: header, a rule, rows, all boxed in `style` with junctions.
+/// Columns size to their widest cell; numbers right-align. Every line is the
+/// same width. `table(&["NAME", "PID"], &[vec!["cargo".into(), "9021".into()]], SINGLE)`:
+///
+/// ```text
+/// ┌───────┬──────┐
+/// │ NAME  │  PID │
+/// ├───────┼──────┤
+/// │ cargo │ 9021 │
+/// └───────┴──────┘
+/// ```
+pub fn table(headers: &[&str], rows: &[Vec<String>], style: BoxStyle) -> Vec<String> {
+    let cols = headers.len().max(rows.iter().map(Vec::len).max().unwrap_or(0));
+    let widths: Vec<usize> = (0..cols)
+        .map(|c| {
+            let head = headers.get(c).map_or(0, |h| h.chars().count());
+            rows.iter().filter_map(|r| r.get(c)).map(|x| x.chars().count()).max().unwrap_or(0).max(head)
+        })
+        .collect();
+    let right: Vec<bool> = (0..cols)
+        .map(|c| {
+            let cells: Vec<&String> = rows.iter().filter_map(|r| r.get(c)).collect();
+            !cells.is_empty() && cells.iter().all(|x| numeric(x))
+        })
+        .collect();
+    let rule = |l: char, j: char, r: char| {
+        let mid: Vec<String> = widths.iter().map(|w| style.h.to_string().repeat(w + 2)).collect();
+        format!("{l}{}{r}", mid.join(&j.to_string()))
+    };
+    let line = |cells: &[String]| {
+        let mid: Vec<String> = (0..cols).map(|c| format!(" {} ", fit(cells.get(c).map_or("", |x| x), widths[c], right[c]))).collect();
+        format!("{v}{}{v}", mid.join(&style.v.to_string()), v = style.v)
+    };
+    let head: Vec<String> = headers.iter().map(|h| h.to_uppercase()).collect();
+    let mut out = vec![rule(style.tl, style.down, style.tr), line(&head), rule(style.right, style.cross, style.left)];
+    out.extend(rows.iter().map(|r| line(r)));
+    out.push(rule(style.bl, style.up, style.br));
+    out
+}
+
+/// The guide for each line of an indented outline, `tree`-command style.
+/// `items` are `(depth, label)` in display order; returns `(guide, label)`
+/// pairs where the guide is `├── `, `└── ` and `│   ` runs. Depth 0 has no
+/// guide.
+pub fn tree<'a>(items: &[(usize, &'a str)]) -> Vec<(String, &'a str)> {
+    // Whether the item at `i` is the last of its siblings: no later item at
+    // the same depth before the outline climbs above it.
+    let last = |i: usize| {
+        let d = items[i].0;
+        !items[i + 1..].iter().take_while(|(dd, _)| *dd >= d).any(|(dd, _)| *dd == d)
+    };
+    let mut open: Vec<bool> = Vec::new(); // per depth: a sibling still follows
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, &(depth, label))| {
+            open.truncate(depth);
+            let mut guide = String::new();
+            for d in 1..depth {
+                guide.push_str(if open.get(d).copied().unwrap_or(false) { "│   " } else { "    " });
+            }
+            let is_last = last(i);
+            if depth > 0 {
+                guide.push_str(if is_last { "└── " } else { "├── " });
+            }
+            open.resize(depth + 1, false);
+            open[depth] = !is_last;
+            (guide, label)
+        })
+        .collect()
+}
+
+/// A text plot of `values`, `cols` × `rows` cells, scaled to their own
+/// min..max: `*` on each point, `:` joining a point to the next one when it
+/// jumps more than a row, so the line reads continuous. Rows top to bottom;
+/// no axes (the component draws those).
+pub fn plot(values: &[f32], cols: usize, rows: usize) -> Vec<String> {
+    let (cols, rows) = (cols.max(2), rows.max(2));
+    let mut grid = vec![vec![' '; cols]; rows];
+    if values.is_empty() {
+        return grid.into_iter().map(|r| r.into_iter().collect()).collect();
+    }
+    let (lo, hi) = values.iter().fold((f32::MAX, f32::MIN), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+    let span = (hi - lo).max(f32::EPSILON);
+    let sample = |c: usize| {
+        let x = c as f32 / (cols - 1) as f32 * (values.len() - 1) as f32;
+        let (i, f) = (x.floor() as usize, x.fract());
+        let next = values[(i + 1).min(values.len() - 1)];
+        values[i] + (next - values[i]) * f
+    };
+    let row_of = |v: f32| ((1. - (v - lo) / span) * (rows - 1) as f32).round() as usize;
+    let ys: Vec<usize> = (0..cols).map(|c| row_of(sample(c))).collect();
+    for c in 0..cols {
+        if c + 1 < cols {
+            let (a, b) = (ys[c].min(ys[c + 1]), ys[c].max(ys[c + 1]));
+            for row in grid.iter_mut().take(b).skip(a + 1) {
+                row[c] = ':';
+            }
+        }
+        grid[ys[c]][c] = '*';
+    }
+    grid.into_iter().map(|r| r.into_iter().collect()).collect()
+}
+
+/// A month as `cal` prints it: a title line, weekday initials, then weeks of
+/// right-aligned day numbers, each line 20 characters (7 cells of 3, minus
+/// the trailing space). Weeks start on Monday unless `sunday_first`.
+pub fn cal(year: i32, month: u32, sunday_first: bool) -> Vec<String> {
+    use crate::components::calendar::{Date, days_in_month};
+    const MONTHS: [&str; 12] =
+        ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+    let first = Date::new(year, month, 1);
+    let title = format!("{} {year}", MONTHS[(first.month - 1) as usize]);
+    let mut out = vec![format!("{:^20}", title).trim_end().to_string()];
+    out.push(if sunday_first { "Su Mo Tu We Th Fr Sa" } else { "Mo Tu We Th Fr Sa Su" }.to_string());
+    let lead = if sunday_first { (first.weekday() + 1) % 7 } else { first.weekday() } as usize;
+    let mut cells: Vec<String> = vec!["  ".into(); lead];
+    cells.extend((1..=days_in_month(first.year, first.month)).map(|d| format!("{d:>2}")));
+    for week in cells.chunks(7) {
+        out.push(week.join(" "));
+    }
+    out
+}
+
+/// The `width`-character window of a scrolling `text` at `step`: the text
+/// loops with a three-space gap, moving one character per step.
+pub fn marquee(text: &str, width: usize, step: usize) -> String {
+    let looped: Vec<char> = text.chars().chain("   ".chars()).collect();
+    if looped.is_empty() {
+        return " ".repeat(width);
+    }
+    (0..width).map(|i| looped[(step + i) % looped.len()]).collect()
+}
+
+/// `lines` boxed in `style`, optionally titled — the whole frame as strings,
+/// for text that leaves the app (use [`PLAIN`] for the clipboard).
+pub fn frame(lines: &[&str], style: BoxStyle, title: Option<&str>) -> Vec<String> {
+    let inner = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0).max(title.map_or(0, |t| t.chars().count() + 6));
+    let cols = inner + 4;
+    let mut out = vec![box_edge(style, cols, true, title)];
+    out.extend(lines.iter().map(|l| format!("{v} {} {v}", fit(l, inner, false), v = style.v)));
+    out.push(box_edge(style, cols, false, None));
+    out
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    #[test]
+    fn tables_are_rectangular_and_align_numbers() {
+        let rows = vec![vec!["cargo".to_string(), "9021".to_string()], vec!["sshd".to_string(), "612".to_string()]];
+        for (_, style) in STYLES {
+            let t = table(&["name", "pid"], &rows, style);
+            assert_eq!(t.len(), 6);
+            let w = t[0].chars().count();
+            assert!(t.iter().all(|l| l.chars().count() == w), "{t:#?}");
+        }
+        let t = table(&["name", "pid"], &rows, SINGLE);
+        assert_eq!(t[0], "┌───────┬──────┐");
+        assert_eq!(t[1], "│ NAME  │  PID │");
+        assert_eq!(t[4], "│ sshd  │  612 │");
+        assert_eq!(t[5], "└───────┴──────┘");
+    }
+
+    #[test]
+    fn tree_guides_follow_siblings() {
+        let items = [(0, "src/"), (1, "components/"), (2, "menu.rs"), (2, "tree.rs"), (1, "lib.rs"), (0, "Cargo.toml")];
+        let lines: Vec<String> = tree(&items).into_iter().map(|(g, l)| format!("{g}{l}")).collect();
+        assert_eq!(lines, ["src/", "├── components/", "│   ├── menu.rs", "│   └── tree.rs", "└── lib.rs", "Cargo.toml"]);
+    }
+
+    #[test]
+    fn plots_mark_every_column_and_join_jumps() {
+        let p = plot(&[0., 10., 0.], 5, 4);
+        assert_eq!(p.len(), 4);
+        assert!(p.iter().all(|r| r.chars().count() == 5));
+        for c in 0..5 {
+            assert_eq!(p.iter().filter(|r| r.chars().nth(c) == Some('*')).count(), 1, "one point per column");
+        }
+        assert!(p.iter().any(|r| r.contains(':')), "a jump is joined");
+        assert!(p[0].contains('*') && p[3].contains('*'), "spans the height");
+    }
+
+    #[test]
+    fn cal_matches_the_unix_layout() {
+        let c = cal(2026, 10, false);
+        assert_eq!(c[1], "Mo Tu We Th Fr Sa Su");
+        // 1 October 2026 is a Thursday.
+        assert_eq!(c[2], "          1  2  3  4");
+        assert!(c.iter().skip(2).all(|l| l.chars().count() <= 20));
+        assert!(c.last().unwrap().trim_end().ends_with("31"));
+        assert_eq!(cal(2026, 10, true)[2], "             1  2  3");
+    }
+
+    #[test]
+    fn marquee_loops_and_frames_box() {
+        assert_eq!(marquee("ABC", 4, 0), "ABC ");
+        assert_eq!(marquee("ABC", 4, 3), "   A");
+        assert_eq!(marquee("ABC", 4, 6), "ABC ");
+        let f = frame(&["hello", "hi"], PLAIN, None);
+        assert_eq!(f, ["+-------+", "| hello |", "| hi    |", "+-------+"].map(String::from));
+    }
+}
+

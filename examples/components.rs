@@ -20,7 +20,7 @@ use ferrite_design::{
         property_list, scan, select, sidebar, skeleton, skeleton_text, sparkline, stat, steps, timeline, toolbar, wipe_in, afterglow, column, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in, dialog, scroll_area, segmented, slider, split, table, tree, tree_node, virtual_list,
     },
     ascii,
-    components::{ascii_art, ascii_box, ascii_gauge, ascii_rule, banner},
+    components::{ascii_art, ascii_bars, ascii_box, ascii_button, ascii_cal, ascii_gauge, ascii_list, ascii_plot, ascii_rule, ascii_table, ascii_tree, banner, marquee},
     dither::{self, dither},
     icon::icon,
     motion, palette, theme,
@@ -83,6 +83,7 @@ struct Components {
     inputs: Vec<Entity<TextInput>>,
     name_errors: u32,
     replay: [u32; 26],
+    ascii_pick: usize,
     // Forms
     region: Option<usize>,
     workers: f64,
@@ -180,6 +181,7 @@ impl Components {
             inputs,
             name_errors: 0,
             replay: [0; 26],
+            ascii_pick: 1,
             region: Some(0),
             workers: 8.,
             timeout: 2.5,
@@ -1304,6 +1306,31 @@ impl Components {
         let p = palette(cx);
         let replay = self.replay[22];
         let note = |t: &'static str| div().body(text::SM).text_color(hsla(p.fg_dim)).child(t);
+        let replay_button = |id: &'static str| {
+            Button::new(id).label("Replay").icon(Icon::Refresh).small().ghost().on_click(cx.listener(|this, _, _, cx| {
+                this.replay[22] += 1;
+                cx.notify();
+            }))
+        };
+
+        // Title screen.
+        let title = ascii_box()
+            .style(ascii::DOUBLE)
+            .ink(hsla(p.accent))
+            .draw_on(("ascii-title", replay as usize), replay)
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .child(banner(("banner", replay as usize), "FERRITE").shadow())
+                    .child(marquee("ascii-marquee", "TEXT MODE · BOX DRAWING · BANNERS · TABLES · TREES · PLOTS · BARS · CAL · SPINNERS").cells(40)),
+            )
+            .child(note("banner(..).shadow(): the 5×5 block font with a dithered drop shadow. marquee(..): a looping ticker. The frame draws itself on clockwise (ascii_box().draw_on)."))
+            .child(div().flex().flex_row().justify_end().child(replay_button("ascii-replay")));
+
+        // Gauges and spinners.
         let system = ascii_box()
             .title("System")
             .flex_1()
@@ -1313,52 +1340,158 @@ impl Components {
             .child(ascii_gauge(0.97).label("swap"));
         let spin = |id: &'static str, frames: &'static [&'static str], label: &'static str| {
             div().flex().flex_row().items_center().gap_3()
-                .child(div().w(px(48.)).child(spinner(id).frames(frames).color(hsla(p.accent))))
+                .child(div().w(px(64.)).child(spinner(id).frames(frames).color(hsla(p.accent))))
                 .child(div().body(text::SM).text_color(hsla(p.fg_dim)).child(label))
         };
-        let boot = ascii_box()
-            .title("Boot")
-            .double()
-            .ink(hsla(p.accent))
+        let spinners = ascii_box()
+            .title("Spinners")
+            .style(ascii::DOUBLE_V)
             .flex_1()
             .child(div().display(Scale::X1, window).child(typewriter(("boot-line", replay as usize), "C:\\FERRITE> RUN ATLAS.EXE")))
-            .child(spin("sp-line", ascii::spinners::LINE, "line"))
-            .child(spin("sp-shade", ascii::spinners::SHADE, "shade"))
-            .child(spin("sp-dots", ascii::spinners::DOTS, "dots"))
-            .child(spin("sp-pulse", ascii::spinners::PULSE, "pulse"))
-            .child(spin("sp-bounce", ascii::spinners::BOUNCE, "bounce"));
-        let title = ascii_box()
-            .child(div().flex().flex_row().items_center().justify_between()
-                .child(banner(("banner", replay as usize), "FERRITE"))
-                .child(Button::new("banner-replay").label("Replay").icon(Icon::Refresh).small().ghost().on_click(cx.listener(|this, _, _, cx| {
-                    this.replay[22] += 1;
-                    cx.notify();
-                }))))
-            .child(note("banner(): the built-in 5×5 block font, one pixel = half a cell — A–Z, 0–9, - . ! ? : / _"));
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(div().flex().flex_col().gap_1()
+                        .child(spin("sp-line", ascii::spinners::LINE, "line"))
+                        .child(spin("sp-shade", ascii::spinners::SHADE, "shade"))
+                        .child(spin("sp-dots", ascii::spinners::DOTS, "dots"))
+                        .child(spin("sp-pulse", ascii::spinners::PULSE, "pulse"))
+                        .child(spin("sp-bounce", ascii::spinners::BOUNCE, "bounce")))
+                    .child(div().flex().flex_col().gap_1()
+                        .child(spin("sp-arrows", ascii::spinners::ARROWS, "arrows"))
+                        .child(spin("sp-bar", ascii::spinners::BAR, "bar"))
+                        .child(spin("sp-grow", ascii::spinners::GROW, "grow"))
+                        .child(spin("sp-suits", ascii::spinners::SUITS, "suits"))),
+            );
+
+        // Every box style, drawing on in a cascade.
+        let styles = div().flex().flex_row().gap(space::ROW).children(ascii::STYLES.iter().enumerate().map(|(i, (name, style))| {
+            ascii_box()
+                .title(*name)
+                .style(*style)
+                .flex_1()
+                .when(i == 1, |b| b.ink(hsla(p.accent)))
+                .when(i >= 3, |b| b.shadow())
+                .draw_on(("ascii-style", i * 1000 + replay as usize), replay)
+                .child(note(match i {
+                    0 => "the default",
+                    1 => "emphasis: the focused box",
+                    2 => "double rules: a header",
+                    3 => "double sides: a column",
+                    _ => "plain ASCII: for the clipboard",
+                }))
+        }));
+
+        // Data in text.
+        let procs = [("ferrite-atlas", 4412, 31.0, 412), ("cargo", 9021, 12.4, 188), ("rust-analyzer", 3310, 4.2, 1630), ("dither-bake", 5120, 57.3, 64), ("sshd", 612, 0.0, 12)];
+        let table = procs.iter().fold(
+            ascii_table().header(["name", "pid", "cpu", "mem"]).selected(Some(self.ascii_pick % procs.len())),
+            |t, (n, pid, cpu, mem)| t.row([n.to_string(), pid.to_string(), format!("{cpu:.1}%"), format!("{mem} MB")]),
+        );
+        let tree = ascii_tree()
+            .item(0, "ferrite-design/")
+            .item(1, "src/")
+            .item(2, "components/")
+            .item(3, "textmode.rs")
+            .item(3, "menu.rs")
+            .item(2, "ascii.rs")
+            .item(2, "theme.rs")
+            .item(1, "docs/")
+            .item(2, "DESIGN_LANGUAGE.md")
+            .item(1, "Cargo.toml");
+        let series: Vec<f32> = (0..40).map(|i| {
+            let x = i as f32 / 4.;
+            40. + 18. * x.sin() + 9. * (x * 2.7).cos() + if i == 27 { 30. } else { 0. }
+        }).collect();
+        let plot = ascii_plot(series).size(44, 9).format(|v| format!("{v:.0}MS"));
+        let bars = ascii_bars()
+            .bar("mon", 12.)
+            .bar("tue", 19.)
+            .bar("wed", 7.5)
+            .bar("thu", 23.)
+            .bar("fri", 16.)
+            .bar("sat", 3.)
+            .cells(28)
+            .format(|v| format!("{v:.1}K"));
+
+        // A DOS dialog: double box, shadow, a pick list, text buttons.
+        let picks = ["Quick format", "Full format", "Verify only", "Cancel job"];
+        let this = cx.weak_entity();
+        let dialog = ascii_box()
+            .title("Format A:")
+            .double()
+            .shadow()
+            .w(px(560.))
+            .child(note("Choose an operation. ► marks the selection; the buttons are ascii_button."))
+            .child(
+                picks.iter().fold(ascii_list("ascii-pick"), |l, s| l.item(*s)).selected(Some(self.ascii_pick % picks.len())).on_select({
+                    let this = this.clone();
+                    move |i, _, cx| {
+                        let i = *i;
+                        let _ = this.update(cx, |v, cx| {
+                            v.ascii_pick = i;
+                            cx.notify();
+                        });
+                    }
+                }),
+            )
+            .child(
+                div().flex().flex_row().gap_3().justify_end()
+                    .child(ascii_button("ascii-ok", "Ok").primary().on_click({
+                        let this = this.clone();
+                        move |_, _, cx| {
+                            let _ = this.update(cx, |v, cx| v.log(format!("FORMAT: {}", picks[v.ascii_pick % picks.len()].to_uppercase()), cx));
+                        }
+                    }))
+                    .child(ascii_button("ascii-cancel", "Cancel").on_click(move |_, _, cx| {
+                        let _ = this.update(cx, |v, cx| v.log("FORMAT CANCELLED", cx));
+                    })),
+            );
+        let today = Date::today();
+        let cal = ascii_box().title("cal").style(ascii::DOUBLE_H).child(ascii_cal(today.year, today.month).today(Some(today.day)));
+
         let art = div()
             .flex()
             .flex_row()
             .gap(space::ROW)
             .child(ascii_box().title("ascii_art · classic").flex_1().child(ascii_art(self.orb.clone()).cols(54).color(hsla(p.accent_text))))
             .child(ascii_box().title("ascii_art · bubbles").flex_1().child(ascii_art(self.orb.clone()).cols(54).ramp(&ascii::BUBBLES)));
+
+        let mono = |t: String| div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).whitespace_nowrap().child(t);
+        let clip = ascii::frame(&["ferrite-design 0.1", "10 schemes · 60 components", "copy me anywhere"], ascii::PLAIN, Some("about"));
+
         div()
             .flex()
             .flex_col()
             .gap(space::ROW)
-            .child(note("Text-mode elements, drawn with the pixel font's own box glyphs on its cell grid. One framing style per screen: these for a terminal feel, panel() for everyday UI."))
+            .child(note("Text-mode elements, drawn with the pixel font's own CP437 glyphs on its cell grid. One framing style per screen: these for a terminal feel, panel() for everyday UI."))
             .child(title)
-            .child(div().flex().flex_row().gap(space::ROW).child(system).child(boot))
-            .child(ascii_rule(Some("rules")))
-            .child(ascii_rule(None).double())
+            .child(ascii_rule(Some("box styles")).double())
+            .child(styles)
+            .child(ascii_rule(Some("readouts")))
+            .child(div().flex().flex_row().gap(space::ROW).child(system).child(spinners))
+            .child(ascii_rule(Some("data")))
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(ascii_box().title("ascii_table").flex_1().child(table).child(note("click a row in the dialog below to move the highlight")))
+                    .child(ascii_box().title("ascii_tree").flex_1().child(tree)),
+            )
+            .child(
+                div().flex().flex_row().gap(space::ROW)
+                    .child(ascii_box().title("ascii_plot · latency").flex_1().child(plot))
+                    .child(ascii_box().title("ascii_bars · requests").flex_1().child(bars)),
+            )
+            .child(ascii_rule(Some("controls")))
+            .child(div().flex().flex_row().gap(space::ROW).items_start().pb_4().child(dialog).child(cal))
+            .child(ascii_rule(Some("art")))
             .child(art)
             .child(
                 ascii_box().title("strings").child(
                     div().flex().flex_col().gap_1()
-                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(ascii::box_edge(ascii::DOUBLE, 30, true, Some("box_edge"))))
-                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(ascii::gauge(0.42, 16)))
-                        .child(div().display(Scale::X1, window).text_color(hsla(p.fg_dim)).child(ascii::rule("rule", 30)))
+                        .children(clip.into_iter().map(mono))
+                        .child(mono(ascii::gauge(0.42, 16)))
+                        .child(mono(ascii::rule("rule", 30)))
                         .child(div().body(text::BASE).text_color(hsla(p.accent_text)).child(ascii::sparkline(&[1., 3., 2., 5., 8., 6., 9., 4., 7., 10., 6., 3.])))
-                        .child(note("The ascii module returns strings too, for anything you compose yourself (sparkline is body-face: the pixel font lacks eighth blocks).")),
+                        .child(note("The ascii module returns plain strings too: frame, table, tree, plot, cal, marquee, gauge, rule (sparkline is body-face: the pixel font lacks eighth blocks).")),
                 ),
             )
     }

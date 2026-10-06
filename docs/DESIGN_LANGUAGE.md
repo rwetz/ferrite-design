@@ -248,12 +248,19 @@ set. Two layers:
 
   | Element | What it is | Use it for |
   |---|---|---|
-  | `ascii_box()` | a frame of real box glyphs, `┌─[ TITLE ]─┐` or `╔═╗` (`.double()`), any size | terminal-feel blocks: system status, boot screens, about boxes, a retro mode |
+  | `ascii_box()` | a frame of real box glyphs, `┌─[ TITLE ]─┐`, `╔═╗` (`.double()`), `╒═╕`, `╓─╖` or `+-+` (`.style(..)`), any size; `.shadow()`, `.draw_on(..)` | terminal-feel blocks: system status, boot screens, about boxes, dialogs, a retro mode |
   | `ascii_rule(label)` | `── LABEL ─────` across the width (`.double()`) | dividers inside text-mode screens |
   | `banner(id, text)` | big 5×5 block letters, drawn on with a wipe | title screens, splash, empty states |
   | `ascii_art(picture)` | a grayscale `Picture` as characters (` .:-=+*#%@`, any ramp) | hero art, about boxes, loading art |
   | `ascii_gauge(v)` | `CPU [████▒·····]  42%` | dense live readouts; never animates |
-  | `spinner(..).frames(ascii::spinners::X)` | `LINE` `SHADE` `DOTS` `PULSE` `BOUNCE` | busy states |
+  | `ascii_table()` | a boxed text grid: `┌──┬──┐ │ │ ├──┼──┤` | readouts, reports, about boxes (`table` is the interactive one) |
+  | `ascii_tree()` | `├── src/` `│   └── lib.rs` | file listings, outlines, dependency trees |
+  | `ascii_plot(values)` | `*` points joined by `:`, a labelled axis | a series in a text screen |
+  | `ascii_bars()` | `MON ████████····· 12.0K` | a comparison in a text screen |
+  | `ascii_cal(y, m)` | the month as `cal` prints it | dates in a text screen (`calendar` is the interactive one) |
+  | `marquee(id, text)` | a looping ticker | an attract screen, a status ticker — one per screen |
+  | `ascii_button(id, label)` / `ascii_list(id)` | `< OK >`, `► ITEM` | text-mode dialogs and menus |
+  | `spinner(..).frames(ascii::spinners::X)` | `LINE` `SHADE` `DOTS` `PULSE` `BOUNCE` `ARROWS` `BAR` `GROW` `SUITS` | busy states |
   | `mark()` | the `▓▒░` mark, as real dither | the title bar, sidebars, splash |
 
 Rules:

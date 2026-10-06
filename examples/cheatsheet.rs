@@ -66,6 +66,16 @@ impl Render for V {
             .child(ascii_box().title("System").double().ink(hsla(p.accent)).child(div())).child(ascii_rule(Some("logs")).double())
             .child(banner("bn", "FERRITE")).child(ascii_art(dither::Picture::from_fn(4, 4, |u, _| u)).cols(48).ramp(&ascii::BUBBLES)).child(ascii_gauge(0.42).label("cpu").cells(12))
             .child(spinner("sp2").frames(ascii::spinners::DOTS)).child(mark()).child(ascii::gauge(0.4, 10)).child(ascii::box_edge(ascii::SINGLE, 20, true, Some("t")))
+            .child(ascii_box().style(ascii::DOUBLE_H).shadow().draw_on("ab", 0).child(banner("bn2", "F").shadow()))
+            .child(ascii_table().header(["name", "pid"]).row(["cargo", "9021"]).selected(Some(0))).child(ascii_tree().item(0, "src/").item(1, "lib.rs"))
+            .child(ascii_plot(vec![1., 2., 3.]).size(48, 8).format(|v| format!("{v:.0}MS"))).child(ascii_bars().bar("mon", 12.).cells(24)).child(ascii_cal(2026, 10).today(Some(6)))
+            .child(marquee("mq", "NOW PLAYING").cells(32)).child(ascii_button("ok", "Ok").primary().on_click(|_, _, _| {})).child(ascii_list("al").item("Quick").selected(Some(0)).on_select(|_, _, _| {}))
+            .child(ascii::table(&["a"], &[vec!["1".into()]], ascii::PLAIN).join("
+")).child(ascii::tree(&[(0, "src/")]).len().to_string()).child(ascii::plot(&[1., 2.], 8, 4).join("
+"))
+            .child(ascii::cal(2026, 10, false).join("
+")).child(ascii::frame(&["x"], ascii::PLAIN, Some("t")).join("
+"))
     }
 }
 fn main() {

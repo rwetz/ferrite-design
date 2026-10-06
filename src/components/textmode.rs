@@ -13,6 +13,12 @@
 //!       .:-=+**#%%@@%%#*+=-:.        ascii_art: any Picture as characters
 //! ```
 //!
+//! More of the same family: [`ascii_table`], [`ascii_tree`], [`ascii_plot`],
+//! [`ascii_bars`], [`ascii_cal`], [`marquee`], and two controls,
+//! [`ascii_button`] (`< OK >`) and [`ascii_list`] (`► item`). Boxes come in
+//! five styles (`ascii::STYLES`), cast a dithered DOS shadow, and can draw
+//! themselves on, tracing the frame clockwise.
+//!
 //! Frames are painted as shaped glyphs, not CSS borders, so they are the
 //! pixel font's own strokes: they join at the corners exactly as DOS boxes
 //! do. A box can be any size: edges are clipped to it, so a fractional last
@@ -20,10 +26,12 @@
 //! feel — a status block, a boot screen, an about box, a retro mode — and
 //! keep `panel` as the everyday frame: one framing style per screen.
 
+use std::rc::Rc;
+
 use gpui::{
-    AnyElement, App, Bounds, ContentMask, ElementId, Hsla, IntoElement, ParentElement, Pixels, RenderOnce,
-    SharedString, StyleRefinement, Styled, TextAlign, TextRun, Window, canvas, div, font, point,
-    prelude::FluentBuilder as _, px, size,
+    AnyElement, App, Bounds, ClickEvent, ContentMask, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, TextAlign,
+    TextRun, Window, canvas, div, font, point, prelude::FluentBuilder as _, px, size,
 };
 
 use crate::ascii::{self, BoxStyle};
@@ -59,12 +67,30 @@ pub struct AsciiBox {
     title: Option<SharedString>,
     style: BoxStyle,
     ink: Option<Hsla>,
+    shadow: bool,
+    draw_on: Option<(ElementId, u64)>,
     children: Vec<AnyElement>,
     refinement: StyleRefinement,
 }
 
 pub fn ascii_box() -> AsciiBox {
-    AsciiBox { title: None, style: ascii::SINGLE, ink: None, children: Vec::new(), refinement: StyleRefinement::default() }
+    AsciiBox {
+        title: None,
+        style: ascii::SINGLE,
+        ink: None,
+        shadow: false,
+        draw_on: None,
+        children: Vec::new(),
+        refinement: StyleRefinement::default(),
+    }
+}
+
+/// How much of each side of a `w`×`h` frame a draw-on has traced when
+/// `d` of its perimeter is drawn, clockwise from the top-left corner:
+/// `[top →, right ↓, bottom ←, left ↑]`, each in pixels.
+pub fn perimeter(w: f32, h: f32, d: f32) -> [f32; 4] {
+    let side = |start: f32, len: f32| (d - start).clamp(0., len);
+    [side(0., w), side(w, h), side(w + h, w), side(2. * w + h, h)]
 }
 
 impl AsciiBox {
@@ -83,6 +109,31 @@ impl AsciiBox {
     /// Frame color (default `line_strong`; pass the accent for the active box).
     pub fn ink(mut self, color: Hsla) -> Self {
         self.ink = Some(color);
+        self
+    }
+
+    /// Any box style: `ascii::SINGLE`, `DOUBLE`, `DOUBLE_H` (`╒═╕`),
+    /// `DOUBLE_V` (`╓─╖`) or `PLAIN` (`+-+`).
+    pub fn style(mut self, style: BoxStyle) -> Self {
+        self.style = style;
+        self
+    }
+
+    /// A DOS drop shadow: one dithered cell to the right and below, outside
+    /// the box. For dialogs and anything floating.
+    pub fn shadow(mut self) -> Self {
+        self.shadow = true;
+        self
+    }
+
+    /// Trace the frame on, clockwise from the top-left corner behind an
+    /// amber cursor, when the box first appears and whenever `key` changes;
+    /// the content unrolls with it.
+    pub fn draw_on(mut self, id: impl Into<ElementId>, key: impl std::hash::Hash) -> Self {
+        use std::hash::{DefaultHasher, Hasher};
+        let mut h = DefaultHasher::new();
+        key.hash(&mut h);
+        self.draw_on = Some((id.into(), h.finish()));
         self
     }
 }
@@ -107,6 +158,12 @@ impl RenderOnce for AsciiBox {
         let cell_h = display_size(Scale::X1, window);
         let cell_w = cell_h / 2.;
         let (style, title) = (self.style, self.title);
+        let traced = self
+            .draw_on
+            .map(|(id, key)| crate::animate::play(id, key, crate::motion::SLOW, window, cx))
+            .filter(|p| !p.done)
+            .map(|p| p.eased());
+        let cursor = hsla(p.accent);
         let frame = canvas(
             |_, _, _| {},
             move |bounds: Bounds<Pixels>, _, window: &mut Window, cx: &mut App| {
@@ -119,17 +176,96 @@ impl RenderOnce for AsciiBox {
                     return;
                 }
                 let full = Bounds::new(point(l, t), size(r - l, b - t));
+                let Some(traced) = traced else {
+                    paint_frame(style, title.as_deref(), (l, t, r, b), (cols, rows), (cell_w, cell_h), (ink, title_ink), window, cx);
+                    return;
+                };
+                // Drawing on: the whole frame, seen through four strips that
+                // grow clockwise round the perimeter, and a cursor cell at
+                // the head.
+                let (w, h) = (f32::from(r - l), f32::from(b - t));
+                let [top, right, bottom, left] = perimeter(w, h, traced * 2. * (w + h));
+                let strips = [
+                    Bounds::new(point(l, t), size(px(top), cell_h)),
+                    Bounds::new(point(r - cell_w, t), size(cell_w, px(right))),
+                    Bounds::new(point(r - px(bottom), b - cell_h), size(px(bottom), cell_h)),
+                    Bounds::new(point(l, b - px(left)), size(cell_w, px(left))),
+                ];
+                for strip in strips {
+                    window.with_content_mask(Some(ContentMask { bounds: strip }), |window| {
+                        paint_frame(style, title.as_deref(), (l, t, r, b), (cols, rows), (cell_w, cell_h), (ink, title_ink), window, cx);
+                    });
+                }
+                let head = if left > 0. {
+                    point(l, b - px(left))
+                } else if bottom > 0. {
+                    point(r - px(bottom), b - cell_h)
+                } else if right > 0. {
+                    point(r - cell_w, t + px(right))
+                } else {
+                    point(l + px(top), t)
+                };
+                let head = point(head.x.clamp(l, r - cell_w), head.y.clamp(t, b - cell_h));
+                window.paint_quad(gpui::fill(Bounds::new(head, size(cell_w, cell_h)), cursor));
+                let _ = full;
+            },
+        )
+        .absolute()
+        .inset_0();
+        // The shadow lands once the frame has finished drawing.
+        let shadow = (self.shadow && traced.is_none()).then(|| {
+            let ink = hsla(p.line_strong);
+            let strip = || dither(dither::flat(dither::level::MEDIUM)).ink(ink).size_full();
+            [
+                div().absolute().top(cell_h).right(-cell_w).w(cell_w).bottom(-cell_h).child(strip()),
+                div().absolute().left(cell_w).right_0().bottom(-cell_h).h(cell_h).child(strip()),
+            ]
+        });
+        let content = div().flex().flex_col().gap_1().children(self.children);
+        let content = match traced {
+            Some(t) => crate::animate::unroll(content, t).into_any_element(),
+            None => content.into_any_element(),
+        };
+        let mut root = div();
+        *root.style() = self.refinement;
+        root.relative()
+            .flex()
+            .flex_col()
+            .min_w(cell_w * 6.)
+            .min_h(cell_h * 3.)
+            .pt(cell_h)
+            .pb(cell_h)
+            .px(cell_w * 2.)
+            .child(content)
+            .child(frame)
+            .children(shadow.into_iter().flatten())
+    }
+}
+
+/// Paint a box frame over `(l, t, r, b)`: edges, the title, the sides.
+#[allow(clippy::too_many_arguments)]
+fn paint_frame(
+    style: BoxStyle,
+    title: Option<&str>,
+    (l, t, r, b): (Pixels, Pixels, Pixels, Pixels),
+    (cols, rows): (usize, usize),
+    (cell_w, cell_h): (Pixels, Pixels),
+    (ink, title_ink): (Hsla, Hsla),
+    window: &mut Window,
+    cx: &mut App,
+) {
+                let full = Bounds::new(point(l, t), size(r - l, b - t));
                 // Edges: everything but the right-hand corner, clipped short
                 // of it, then the corner at the exact right edge.
                 for (top, y) in [(true, t), (false, b - cell_h)] {
-                    let edge = ascii::box_edge(style, cols, top, if top { title.as_deref() } else { None });
+                    let edge = ascii::box_edge(style, cols, top, if top { title } else { None });
                     let clip = Bounds::new(point(l, y), size(r - cell_w - l, cell_h));
                     paint_glyphs(&edge, point(l, y), clip, cell_h, ink, window, cx);
                     let corner = if top { style.tr } else { style.br };
                     paint_glyphs(&corner.to_string(), point(r - cell_w, y), full, cell_h, ink, window, cx);
                 }
                 // The title reads in fg, over the frame-colored copy.
-                if let Some(title) = &title {
+                if let Some(title) = title {
                     let label = ascii::bracket(title);
                     if cols >= label.chars().count() + 4 {
                         let x = l + cell_w * 2.;
@@ -144,23 +280,6 @@ impl RenderOnce for AsciiBox {
                     paint_glyphs(&side, point(l, y), inner, cell_h, ink, window, cx);
                     paint_glyphs(&side, point(r - cell_w, y), inner, cell_h, ink, window, cx);
                 }
-            },
-        )
-        .absolute()
-        .inset_0();
-        let mut root = div();
-        *root.style() = self.refinement;
-        root.relative()
-            .flex()
-            .flex_col()
-            .min_w(cell_w * 6.)
-            .min_h(cell_h * 3.)
-            .pt(cell_h)
-            .pb(cell_h)
-            .px(cell_w * 2.)
-            .child(div().flex().flex_col().gap_1().children(self.children))
-            .child(frame)
-    }
 }
 
 // ── Rule ──────────────────────────────────────────────────────────────────
@@ -228,10 +347,11 @@ pub struct Banner {
     text: SharedString,
     scale: Scale,
     color: Option<Hsla>,
+    shadow: bool,
 }
 
 pub fn banner(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Banner {
-    Banner { id: id.into(), text: text.into(), scale: Scale::X1, color: None }
+    Banner { id: id.into(), text: text.into(), scale: Scale::X1, color: None, shadow: false }
 }
 
 impl Banner {
@@ -244,6 +364,12 @@ impl Banner {
     /// Ink (default: the accent as text).
     pub fn color(mut self, color: Hsla) -> Self {
         self.color = Some(color);
+        self
+    }
+
+    /// A hard dithered drop shadow one font pixel down and right.
+    pub fn shadow(mut self) -> Self {
+        self.shadow = true;
         self
     }
 }
@@ -279,11 +405,20 @@ impl RenderOnce for Banner {
         let (cols, lit) = banner_pixels(&self.text);
         let ink = self.color.unwrap_or_else(|| hsla(p.accent_text));
         let t = crate::animate::play(self.id.clone(), &self.text, crate::motion::SLOW, window, cx);
-        let body = div().flex_none().w(pixel * cols as f32).h(pixel * 5.).child(
+        let shadow = self.shadow.then(|| hsla(p.line_strong));
+        let extra = if self.shadow { 1. } else { 0. };
+        let body = div().flex_none().w(pixel * (cols as f32 + extra)).h(pixel * (5. + extra)).child(
             canvas(
                 |_, _, _| {},
                 move |bounds: Bounds<Pixels>, _, window: &mut Window, _| {
                     let sf = window.scale_factor();
+                    if let Some(ink) = shadow {
+                        for &(x, y) in &lit {
+                            let o = point(snap(bounds.left() + pixel * (x + 1) as f32, sf), snap(bounds.top() + pixel * (y + 1) as f32, sf));
+                            let cell = Bounds::new(o, size(pixel, pixel));
+                            dither::paint_field(dither::flat(dither::level::MEDIUM), cell, ink, window);
+                        }
+                    }
                     for &(x, y) in &lit {
                         let x0 = snap(bounds.left() + pixel * x as f32, sf);
                         let y0 = snap(bounds.top() + pixel * y as f32, sf);
@@ -467,3 +602,495 @@ impl RenderOnce for Mark {
         }))
     }
 }
+
+// ── Shared bits for the grid components ──────────────────────────────────
+
+/// One display-face line with no wrapping.
+fn line(text: impl Into<SharedString>, window: &Window) -> gpui::Div {
+    div().display(Scale::X1, window).whitespace_nowrap().child(text.into())
+}
+
+/// A ruled line (`│ a │ b │`) with the rule glyph in `frame` ink and the
+/// cells in `text` ink.
+fn ruled(text: &str, v: char, frame: Hsla, ink: Hsla, window: &Window) -> gpui::Div {
+    let mut row = div().flex().flex_row().flex_none().display(Scale::X1, window).whitespace_nowrap();
+    for (i, cell) in text.split(v).enumerate() {
+        if i > 0 {
+            row = row.child(div().text_color(frame).child(v.to_string()));
+        }
+        if !cell.is_empty() {
+            row = row.child(div().text_color(ink).child(cell.to_string()));
+        }
+    }
+    row
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────
+
+/// A text-mode table: a boxed grid with junctions, the header in `fg`,
+/// rules in `line_strong`, numbers right-aligned. For readouts, reports and
+/// about boxes; `table` stays the interactive, sortable one.
+///
+/// ```text
+/// ┌───────┬──────┐
+/// │ NAME  │  PID │
+/// ├───────┼──────┤
+/// │ cargo │ 9021 │
+/// └───────┴──────┘
+/// ```
+#[derive(IntoElement)]
+pub struct AsciiTable {
+    headers: Vec<SharedString>,
+    rows: Vec<Vec<String>>,
+    style: BoxStyle,
+    selected: Option<usize>,
+}
+
+pub fn ascii_table() -> AsciiTable {
+    AsciiTable { headers: Vec::new(), rows: Vec::new(), style: ascii::SINGLE, selected: None }
+}
+
+impl AsciiTable {
+    pub fn header<S: Into<SharedString>>(mut self, headers: impl IntoIterator<Item = S>) -> Self {
+        self.headers = headers.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn row<S: ToString>(mut self, cells: impl IntoIterator<Item = S>) -> Self {
+        self.rows.push(cells.into_iter().map(|c| c.to_string()).collect());
+        self
+    }
+
+    pub fn style(mut self, style: BoxStyle) -> Self {
+        self.style = style;
+        self
+    }
+
+    /// Highlight one data row in inverse amber.
+    pub fn selected(mut self, row: Option<usize>) -> Self {
+        self.selected = row;
+        self
+    }
+}
+
+impl RenderOnce for AsciiTable {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let headers: Vec<&str> = self.headers.iter().map(|h| h.as_ref()).collect();
+        let lines = ascii::table(&headers, &self.rows, self.style);
+        let (frame, last) = (hsla(p.line_strong), lines.len() - 1);
+        let v = self.style.v;
+        div().flex().flex_col().flex_none().items_start().children(lines.into_iter().enumerate().map(|(i, l)| match i {
+            0 | 2 => line(l, window).text_color(frame),
+            i if i == last => line(l, window).text_color(frame),
+            1 => ruled(&l, v, frame, hsla(p.fg), window),
+            i if self.selected == Some(i - 3) => ruled(&l, v, frame, hsla(p.accent_fg), window).bg(hsla(p.accent)),
+            _ => ruled(&l, v, frame, hsla(p.fg_dim), window),
+        }))
+    }
+}
+
+// ── Tree ──────────────────────────────────────────────────────────────────
+
+/// An outline drawn like the `tree` command: `├──`, `└──` and `│` guides in
+/// the faint ink, labels in `fg`. Items are `(depth, label)` in order;
+/// folders end in `/` by convention and read in the accent.
+#[derive(IntoElement)]
+pub struct AsciiTree {
+    items: Vec<(usize, SharedString)>,
+}
+
+pub fn ascii_tree() -> AsciiTree {
+    AsciiTree { items: Vec::new() }
+}
+
+impl AsciiTree {
+    pub fn item(mut self, depth: usize, label: impl Into<SharedString>) -> Self {
+        self.items.push((depth, label.into()));
+        self
+    }
+}
+
+impl RenderOnce for AsciiTree {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let items: Vec<(usize, &str)> = self.items.iter().map(|(d, l)| (*d, l.as_ref())).collect();
+        div().flex().flex_col().flex_none().children(ascii::tree(&items).into_iter().map(|(guide, label)| {
+            let ink = if label.ends_with('/') { p.accent_text } else { p.fg };
+            div()
+                .flex()
+                .flex_row()
+                .display(Scale::X1, window)
+                .whitespace_nowrap()
+                .child(div().text_color(hsla(p.fg_faint)).child(guide))
+                .child(div().text_color(hsla(ink)).child(label.to_string()))
+        }))
+    }
+}
+
+// ── Plot ──────────────────────────────────────────────────────────────────
+
+/// A text plot: `*` points joined by `:`, a left axis labelled with the
+/// max and min, a baseline. `cols` × `rows` cells of plot area.
+#[derive(IntoElement)]
+pub struct AsciiPlot {
+    values: Vec<f32>,
+    cols: usize,
+    rows: usize,
+    format: fn(f32) -> String,
+}
+
+pub fn ascii_plot(values: impl Into<Vec<f32>>) -> AsciiPlot {
+    AsciiPlot { values: values.into(), cols: 48, rows: 8, format: |v| format!("{v:.0}") }
+}
+
+impl AsciiPlot {
+    /// Plot area in cells (default 48 × 8).
+    pub fn size(mut self, cols: usize, rows: usize) -> Self {
+        self.cols = cols.max(2);
+        self.rows = rows.max(2);
+        self
+    }
+
+    /// How the axis prints a value (default: whole numbers).
+    pub fn format(mut self, format: fn(f32) -> String) -> Self {
+        self.format = format;
+        self
+    }
+}
+
+impl RenderOnce for AsciiPlot {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let (lo, hi) = self.values.iter().fold((f32::MAX, f32::MIN), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+        let (lo, hi) = if self.values.is_empty() { (0., 0.) } else { (lo, hi) };
+        let labels = [(self.format)(hi), (self.format)(lo)];
+        let lw = labels.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+        let body = ascii::plot(&self.values, self.cols, self.rows);
+        let last = body.len() - 1;
+        let axis = |text: String, tick: char| {
+            div().flex().flex_row().child(div().text_color(hsla(p.fg_dim)).child(text)).child(div().text_color(hsla(p.fg_faint)).child(tick.to_string()))
+        };
+        let mut col = div().flex().flex_col().flex_none().display(Scale::X1, window).whitespace_nowrap();
+        for (r, row) in body.into_iter().enumerate() {
+            let (label, tick) = match r {
+                0 => (format!("{:>lw$} ", labels[0]), '┤'),
+                r if r == last => (format!("{:>lw$} ", labels[1]), '┤'),
+                _ => (" ".repeat(lw + 1), '│'),
+            };
+            col = col.child(div().flex().flex_row().child(axis(label, tick)).child(div().text_color(hsla(p.accent_text)).child(row)));
+        }
+        col.child(div().text_color(hsla(p.fg_faint)).child(format!("{}└{}", " ".repeat(lw + 1), "─".repeat(self.cols))))
+    }
+}
+
+// ── Bars ──────────────────────────────────────────────────────────────────
+
+/// A text bar chart: one labelled row per value, the bar a gauge fill
+/// scaled to the largest value (or `.max(..)`), a right-aligned readout.
+#[derive(IntoElement)]
+pub struct AsciiBars {
+    bars: Vec<(SharedString, f32)>,
+    max: Option<f32>,
+    cells: usize,
+    format: fn(f32) -> String,
+}
+
+pub fn ascii_bars() -> AsciiBars {
+    AsciiBars { bars: Vec::new(), max: None, cells: 24, format: |v| format!("{v:.0}") }
+}
+
+impl AsciiBars {
+    pub fn bar(mut self, label: impl Into<SharedString>, value: f32) -> Self {
+        self.bars.push((label.into(), value));
+        self
+    }
+
+    /// The value a full bar stands for (default: the largest bar).
+    pub fn max(mut self, max: f32) -> Self {
+        self.max = Some(max);
+        self
+    }
+
+    /// Bar width in cells (default 24).
+    pub fn cells(mut self, cells: usize) -> Self {
+        self.cells = cells.max(1);
+        self
+    }
+
+    pub fn format(mut self, format: fn(f32) -> String) -> Self {
+        self.format = format;
+        self
+    }
+}
+
+/// A gauge fill `cells` wide: `·` track, accent quads, a dithered partial
+/// cell (quads, not `█▒` glyphs: PITFALLS §47).
+fn fill_cells(value: f32, cells: usize, inset: Pixels, window: &Window, cx: &App) -> gpui::Div {
+    let p = palette(cx);
+    let cell = display_size(Scale::X1, window) / 2.;
+    let filled = value.clamp(0., 1.) * cells as f32;
+    let (full, frac) = (filled.floor() as usize, filled.fract());
+    let track: String = std::iter::repeat_n('·', cells).collect();
+    div()
+        .relative()
+        .flex_none()
+        .w(cell * cells as f32)
+        .text_color(hsla(p.fg_faint))
+        .child(track)
+        .child(div().absolute().top(inset).bottom(inset).left_0().w(cell * full as f32).bg(hsla(p.accent)))
+        .when(full < cells && frac > 0., |el| {
+            let level = ((frac.max(0.25) * 4.).round() / 4.).min(dither::level::DARK);
+            el.child(
+                div()
+                    .absolute()
+                    .top(inset)
+                    .bottom(inset)
+                    .left(cell * full as f32)
+                    .w(cell)
+                    .bg(hsla(p.bg))
+                    .child(dither(dither::flat(level)).ink(hsla(p.accent)).size_full()),
+            )
+        })
+}
+
+impl RenderOnce for AsciiBars {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let max = self.max.unwrap_or_else(|| self.bars.iter().map(|b| b.1).fold(0., f32::max)).max(f32::EPSILON);
+        let lw = self.bars.iter().map(|b| b.0.chars().count()).max().unwrap_or(0);
+        let readouts: Vec<String> = self.bars.iter().map(|b| (self.format)(b.1)).collect();
+        let rw = readouts.iter().map(|r| r.chars().count()).max().unwrap_or(0);
+        div().flex().flex_col().flex_none().children(self.bars.iter().zip(readouts).map(|((label, v), readout)| {
+            div()
+                .flex()
+                .flex_row()
+                .flex_none()
+                .display(Scale::X1, window)
+                .whitespace_nowrap()
+                .child(div().text_color(hsla(p.fg_dim)).child(format!("{:<lw$} ", label.to_uppercase())))
+                .child(fill_cells(v / max, self.cells, px(3.), window, cx))
+                .child(div().text_color(hsla(p.fg)).child(format!(" {readout:>rw$}")))
+        }))
+    }
+}
+
+// ── Calendar ──────────────────────────────────────────────────────────────
+
+/// A month as `cal` prints it, in the display face: weekends dim, today in
+/// inverse amber. Read-only; `calendar` is the interactive one.
+#[derive(IntoElement)]
+pub struct AsciiCal {
+    year: i32,
+    month: u32,
+    today: Option<u32>,
+    sunday_first: bool,
+}
+
+pub fn ascii_cal(year: i32, month: u32) -> AsciiCal {
+    AsciiCal { year, month, today: None, sunday_first: false }
+}
+
+impl AsciiCal {
+    /// Mark this day of the month.
+    pub fn today(mut self, day: Option<u32>) -> Self {
+        self.today = day;
+        self
+    }
+
+    pub fn sunday_first(mut self) -> Self {
+        self.sunday_first = true;
+        self
+    }
+}
+
+impl RenderOnce for AsciiCal {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let lines = ascii::cal(self.year, self.month, self.sunday_first);
+        let weekend = |i: usize| if self.sunday_first { i == 0 || i == 6 } else { i >= 5 };
+        let mut col = div()
+            .flex()
+            .flex_col()
+            .flex_none()
+            .child(line(lines[0].clone(), window).text_color(hsla(p.fg)))
+            .child(line(lines[1].clone(), window).text_color(hsla(p.fg_faint)));
+        for week in &lines[2..] {
+            let chars: Vec<char> = week.chars().collect();
+            let mut row = div().flex().flex_row().display(Scale::X1, window).whitespace_nowrap();
+            for (i, cell) in chars.chunks(3).enumerate() {
+                let day: String = cell.iter().take(2).collect();
+                let is_today = day.trim().parse::<u32>().ok().is_some_and(|d| Some(d) == self.today);
+                let ink = if is_today { p.accent_fg } else if weekend(i) { p.fg_dim } else { p.fg };
+                row = row
+                    .child(div().text_color(hsla(ink)).when(is_today, |el| el.bg(hsla(p.accent))).child(day))
+                    .when(cell.len() > 2, |el| el.child(" "));
+            }
+            col = col.child(row);
+        }
+        col
+    }
+}
+
+// ── Marquee ───────────────────────────────────────────────────────────────
+
+/// Text scrolling through a fixed window, one cell per 120ms, looping. A
+/// classic for a status ticker or an attract screen; it redraws its view
+/// on a timer while shown, like a spinner, so keep it to one per screen.
+/// Under reduced motion it holds still.
+#[derive(IntoElement)]
+pub struct Marquee {
+    id: ElementId,
+    text: SharedString,
+    cells: usize,
+    color: Option<Hsla>,
+}
+
+pub fn marquee(id: impl Into<ElementId>, text: impl Into<SharedString>) -> Marquee {
+    Marquee { id: id.into(), text: text.into(), cells: 32, color: None }
+}
+
+impl Marquee {
+    /// Window width in cells (default 32).
+    pub fn cells(mut self, cells: usize) -> Self {
+        self.cells = cells.max(1);
+        self
+    }
+
+    pub fn color(mut self, color: Hsla) -> Self {
+        self.color = Some(color);
+        self
+    }
+}
+
+impl RenderOnce for Marquee {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let step = super::ticker::ticker(self.id, crate::motion::FRAME * 3, window, cx);
+        line(ascii::marquee(&self.text, self.cells, step as usize), window).text_color(self.color.unwrap_or_else(|| hsla(p.accent_text)))
+    }
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────
+
+type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
+/// A text-mode button: `< OK >`. Hover lights it amber-dim; `.primary()`
+/// is inverse amber, the one default action of a text-mode dialog.
+#[derive(IntoElement)]
+pub struct AsciiButton {
+    id: ElementId,
+    label: SharedString,
+    primary: bool,
+    on_click: Option<ClickHandler>,
+}
+
+pub fn ascii_button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> AsciiButton {
+    AsciiButton { id: id.into(), label: label.into(), primary: false, on_click: None }
+}
+
+impl AsciiButton {
+    pub fn primary(mut self) -> Self {
+        self.primary = true;
+        self
+    }
+
+    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Rc::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for AsciiButton {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let (ink, bg) = if self.primary { (p.accent_fg, Some(p.accent)) } else { (p.fg, None) };
+        div()
+            .id(self.id)
+            .role(gpui::Role::Button)
+            .aria_label(self.label.clone())
+            .flex_none()
+            .display(Scale::X1, window)
+            .whitespace_nowrap()
+            .cursor_pointer()
+            .text_color(hsla(ink))
+            .when_some(bg, |el, bg| el.bg(hsla(bg)))
+            .when(!self.primary, |el| el.hover(|s| s.bg(hsla(p.accent_dim))))
+            .active(|s| s.bg(hsla(p.fg)).text_color(hsla(p.bg)))
+            .child(format!("< {} >", self.label.to_uppercase()))
+            .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+            .when_some(self.on_click, |el, h| el.on_click(move |ev, window, cx| h(ev, window, cx)))
+    }
+}
+
+type SelectHandler = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
+
+/// A text-mode pick list: `► ITEM` on the selected row in inverse amber,
+/// the others indented, hover in amber-dim. Click to select.
+#[derive(IntoElement)]
+pub struct AsciiList {
+    id: ElementId,
+    items: Vec<SharedString>,
+    selected: Option<usize>,
+    on_select: Option<SelectHandler>,
+}
+
+pub fn ascii_list(id: impl Into<ElementId>) -> AsciiList {
+    AsciiList { id: id.into(), items: Vec::new(), selected: None, on_select: None }
+}
+
+impl AsciiList {
+    pub fn item(mut self, label: impl Into<SharedString>) -> Self {
+        self.items.push(label.into());
+        self
+    }
+
+    pub fn selected(mut self, index: Option<usize>) -> Self {
+        self.selected = index;
+        self
+    }
+
+    pub fn on_select(mut self, handler: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
+        self.on_select = Some(Rc::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for AsciiList {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = palette(cx);
+        let width = self.items.iter().map(|l| l.chars().count()).max().unwrap_or(0) + 3;
+        div().id(self.id).role(gpui::Role::List).flex().flex_col().flex_none().items_start().children(self.items.into_iter().enumerate().map(|(i, label)| {
+            let on = self.selected == Some(i);
+            let text = format!("{}{:<w$}", if on { "► " } else { "  " }, label.to_uppercase(), w = width - 2);
+            let handler = self.on_select.clone();
+            div()
+                .id(("ascii-item", i))
+                .role(gpui::Role::ListItem)
+                .aria_selected(on)
+                .display(Scale::X1, window)
+                .whitespace_nowrap()
+                .cursor_pointer()
+                .text_color(hsla(if on { p.accent_fg } else { p.fg }))
+                .when(on, |el| el.bg(hsla(p.accent)))
+                .when(!on, |el| el.hover(|s| s.bg(hsla(p.accent_dim))))
+                .child(text)
+                .when_some(handler, |el, h| el.on_click(move |_, window, cx| h(&i, window, cx)))
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::perimeter;
+
+    #[test]
+    fn draw_on_traces_clockwise() {
+        assert_eq!(perimeter(10., 4., 0.), [0., 0., 0., 0.]);
+        assert_eq!(perimeter(10., 4., 12.), [10., 2., 0., 0.]);
+        assert_eq!(perimeter(10., 4., 20.), [10., 4., 6., 0.]);
+        assert_eq!(perimeter(10., 4., 28.), [10., 4., 10., 4.]);
+        assert_eq!(perimeter(10., 4., 99.), [10., 4., 10., 4.]);
+    }
+}
+
