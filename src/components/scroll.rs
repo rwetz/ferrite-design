@@ -266,7 +266,13 @@ impl RenderOnce for VirtualList {
             .relative()
             .overflow_hidden()
             .child(
-                uniform_list(self.id, self.count, move |range, window, cx| rows(range, window, cx))
+                // uniform_list lays each row out as a root: without a width
+                // a row's hitbox shrinks to its content and clicks past the
+                // text miss it (PITFALLS 45). A full-width box fixes that for
+                // every caller.
+                uniform_list(self.id, self.count, move |range, window, cx| {
+                    rows(range, window, cx).into_iter().map(|row| div().w_full().child(row).into_any_element()).collect()
+                })
                     .track_scroll(&handle)
                     .size_full()
                     .pr(WIDTH),
