@@ -258,9 +258,8 @@ impl Render for Console {
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
         ferrite_design::init(Appearance::Dark, cx);
-        if let Some(scheme) = std::env::var("FERRITE_SCHEME").ok().and_then(|k| ferrite_design::schemes::by_key(&k)) {
-            ferrite_design::theme::set_scheme(scheme, cx);
-        }
+        // FERRITE_SCHEME / FERRITE_APPEARANCE / FERRITE_FPS, for trying other looks.
+        theme::apply_env(cx);
         let options = chrome::window_options("Console", size(px(1000.), px(680.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);

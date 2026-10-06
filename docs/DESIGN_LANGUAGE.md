@@ -76,7 +76,8 @@ All colors live in `src/tokens.rs` as two `Palette`s. Components ask for a
   never decoration and never sits beside a second "brand" hue.
 - **No blue.** There is no info-blue in Ferrite. "Info" is neutral emphasis
   (`raised` + `fg`). Hues outside amber appear only as semantic status or as
-  desaturated syntax/ANSI colors.
+  desaturated syntax/ANSI colors. (Other schemes, §2.3, may tint their
+  neutrals blue — Harbor, Slate, Cyanotype — but blue is never "info".)
 - **Usable greys.** Iron greys have no hue; the whites carry a hair of warmth
   so amber reads hot against cold metal instead of muddy.
 - **Paper is a printout, not a web page.** Warm off-white stock, ink type,
@@ -86,7 +87,39 @@ All colors live in `src/tokens.rs` as two `Palette`s. Components ask for a
   below 7:1, `fg_dim` / `accent_text` / status colors below 4.5:1, or a line
   becomes invisible (or loud). Change a value, run `cargo test`.
 
-### 2.3 Painting colors yourself
+### 2.3 Schemes
+
+Iron and Paper are the **Ferrite** scheme: the signature and the default.
+`src/schemes.rs` ships nine more, each a dark + light pair, switched at
+runtime with `theme::set_scheme` (or `FERRITE_SCHEME=<key>` in the
+examples):
+
+| Shelf | Schemes |
+|---|---|
+| signature | **Ferrite** — phosphor amber on iron grey |
+| neutral | **Mono** (pure black/white, accent = inverse video) · **Graphite** (soft mid-greys, silver) · **Slate** (cool blue-greys, steel) · **Concrete** (warm greys, bone) |
+| wild | **Harbor** (muted orange on blue-slate) · **Cyanotype** (prussian blueprint, chalk yellow) · **Phosphor** (P1 green CRT) · **Verdigris** (copper brown, patina teal) · **Bruise** (aubergine, acid lime) |
+
+![Neutral schemes](img/schemes-neutral.png)
+![Wild schemes](img/schemes-wild.png)
+
+A scheme changes colors and nothing else, and keeps the color rules:
+
+- **One accent per scheme.** A scheme that pairs two hues puts the second
+  in the *neutral ramp*: Harbor is orange on blue-tinted iron, not orange
+  *and* blue accents. "Active" is always exactly one color.
+- **Same ladder.** Every scheme's `sunken → bg → surface → raised → line`
+  follows Iron's and Paper's lightness (measured in OKLCH), so depth reads
+  the same everywhere. Light variants stay paper: near-neutral stock.
+- **An accent never looks like a status.** Any accent with real chroma
+  keeps ≥15° of OKLCH hue from danger, success and warning (a scheme may
+  move a status hue to make room — Phosphor's success is teal, Cyanotype's
+  warning is orange). Tested in `tokens::tests`, with the contrast rules.
+
+The palettes were generated from a small OKLCH model (neutral hue + chroma,
+one accent) and contrast-corrected; hand-tune freely, then `cargo test`.
+
+### 2.4 Painting colors yourself
 
 ```rust
 let p = ferrite_design::palette(cx);     // the palette on screen right now
@@ -140,9 +173,10 @@ already includes its leading.
 Symbols are **pixel icons** (`src/icon.rs`), not font glyphs: 16×16 one-bit
 bitmaps drawn with the display face's own stroke (2px stems, 1px margin),
 rasterised at the same whole-pixel multiple as display type so they share
-its grid, and cached like dither. 21 ship: `plus close check play stop
-pause refresh search up down chevron_down chevron_right menu more copy
-trash file folder warning dot sliders`. Inside fixed-height controls use
+its grid, and cached like dither. 32 ship: `plus minus close check play
+stop pause refresh search up down chevron_up chevron_down chevron_left
+chevron_right menu more copy trash file folder warning info dot sliders
+user calendar home bell chart terminal lock`. Inside fixed-height controls use
 `icon(..).fit(max)`.
 
 ---
@@ -253,7 +287,7 @@ bold yet contained.**
 | **flash** | a button floods ▓ with its text color, then dissolves back | every button click |
 | **stamp** | a mark arrives through two noise glyphs (`#` `*` → `x`) | checkbox, radio |
 | **sweep** | the selection wash fills left→right behind the row; the amber bar lands at once | list items, table rows, tree rows |
-| **cascade** | items decrypt in one frame apart (max 8) | tree branches opening |
+| **cascade** | items arrive one frame apart (max 8): decrypting rows, or unrolling items with `cascade_in` | tree branches opening, timelines, install logs |
 | **boot** | a header's title decrypts while its dither rule draws on | every panel and the title bar, on first appearance |
 | **develop** | a blue-noise veil thins speck by speck, 64 levels | pictures and art arriving (`develop`) |
 | **afterglow** | the old value lingers under the new one: amber, then dim, then gone | values that change as events (`afterglow`) |
@@ -262,6 +296,10 @@ bold yet contained.**
 | **ping** | a square dither ring steps out 8px, ▓ → ▒ → ░ | a new item arriving at a marker (`ping`) |
 | **seek** | the active edge steps from the old tab to the new one, resizing | tab strips |
 | **power-on / off** | an amber line draws out from the centre, then the picture opens vertically; closing runs it backwards | every window, each launch (`power_on_in`); the switch-off with `chrome::power_off_on_close` |
+| **wipe** | unroll on its side: revealed from one edge behind a vertical amber scan line | drawers, sidebars, section switches (`wipe_in`) |
+| **scan** | one amber line passes down over content that is already there | "refreshed in place": a reloaded pane, a re-run query (`scan`) |
+| **flash** | the button's click flash for any element: floods ▓ in the accent, dissolves back | "look here" — a value that needs attention (`flash`) |
+| **draw-on** | charts wipe in left→right once; bars grow from the baseline a frame apart | `line_chart`, `bar_chart` — live updates after that are instant |
 
 ### 6.2 Refresh rate
 
@@ -363,6 +401,17 @@ The control grammar, in one place:
 | split | 1px divider, amber while hovered or dragged; resize cursor over a 7px grab zone |
 | notification | toast: floating surface + 2px tone bar on the left, display-face code (`INFO OK WARN ERR`), countdown drained in 16 steps along the bottom edge |
 | match highlight | matched characters in `accent_text`, nothing else |
+| form field | display-face label in a fixed column; hint dim under the control; error replaces the hint in danger with a warning icon, and the row shakes once per new error |
+| select | a `sunken` well like an input, value + chevron; the menu marks the current option with a check |
+| number | `[-] 008 [+]`: zero-padded, fixed-width display-face readout between two square steppers |
+| date | month grid of 32px cells; today framed in amber, selection inverse video, out-of-range days in `line_strong` |
+| drawer | a dialog pinned to a window edge: full height, wipes in from that edge over the screen door |
+| sidebar | `surface` column; section labels in faint display type with a dither rule; the active item gets the selected-row treatment; collapsed = icon rail with tooltips |
+| pagination / steps | square cells; current page inverse video; done steps carry an amber check and an amber connector |
+| alert | inline: `raised` box with a 2px tone bar on the left, tone icon, `[ TITLE ]` in the tone — a toast that lives in the layout |
+| loading | `skeleton`: light dither in the content's shape with a stepped scan band — never a spinner over empty space |
+| charts | steps, not curves: values hold for their column; area = ░ dither in the accent; density = dither level (heatmaps); hover inverts or draws a 1px crosshair |
+| avatar | a 5×5 mirrored identicon on the pixel grid, or initials in the display face; presence is a square |
 
 Conventions for any component, ours or wrapped:
 
@@ -378,8 +427,8 @@ Conventions for any component, ours or wrapped:
 
 An app belongs to the Ferrite family when it has:
 
-1. The Iron/Paper palettes via `ferrite_design::init` — one amber accent,
-   no other brand hue, no blue.
+1. A shipped scheme via `ferrite_design::init` (+ `theme::set_scheme`;
+   Ferrite's Iron/Paper by default) — one accent, no second brand hue.
 2. PxPlus display type at snapped sizes; JetBrains Mono for everything read.
 3. 0px corners everywhere, including the window; no shadows.
 4. Square self-drawn chrome on Win/Linux, native on macOS, `▓▒░` mark.
