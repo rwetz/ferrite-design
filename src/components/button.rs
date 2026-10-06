@@ -284,9 +284,7 @@ impl RenderOnce for Button {
             cx,
         );
         // Capped at ▓ (75%) so the label still reads through the flash.
-        let flash = (!ack.done)
-            .then(|| (crate::animate::dissolve_level(ack) * crate::dither::level::DARK * 16.).round() / 16.)
-            .filter(|l| *l > 0.);
+        let flash = crate::animate::flash_level(ack);
 
         div()
             .id(self.id.clone())

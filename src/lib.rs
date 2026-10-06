@@ -21,8 +21,10 @@
 //! }
 //! ```
 //!
-//! See `docs/DESIGN_LANGUAGE.md` for the full language and
-//! `examples/showcase.rs` for every primitive on one screen.
+//! See `docs/DESIGN_LANGUAGE.md` for the full language,
+//! `examples/components.rs` for every component live, and `examples/app_*.rs`
+//! for whole-app templates. `use ferrite_design::prelude::*;` brings in
+//! everything a view usually needs.
 
 pub mod animate;
 pub mod ascii;
@@ -33,6 +35,7 @@ pub mod fonts;
 pub mod fuzzy;
 pub mod icon;
 pub mod motion;
+pub mod prelude;
 mod raster;
 pub mod theme;
 pub mod tokens;

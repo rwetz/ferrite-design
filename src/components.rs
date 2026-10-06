@@ -5,11 +5,19 @@
 //! (`Panel`, `StatusBar`, `rule`, …) here.
 
 pub mod button;
+pub mod calendar;
+pub mod chart;
 pub mod dialog;
+pub mod disclosure;
+pub mod display;
+pub mod drawer;
+pub mod feedback;
+pub mod form;
 pub mod fx;
 pub mod input;
 pub mod list;
 pub mod menu;
+pub mod nav;
 pub mod overlay;
 pub mod palette;
 pub mod scroll;
@@ -26,13 +34,22 @@ pub mod tree;
 pub mod tooltip;
 
 pub use button::Button;
+pub use calendar::{Calendar, Date, DatePicker, calendar, date_picker};
+pub use chart::{BarChart, Heatmap, LineChart, Sparkline, bar_chart, heatmap, line_chart, sparkline};
 pub use dialog::{Dialog, dialog};
+pub use display::{Avatar, Presence, PropertyList, Stat, Timeline, TimelineEvent, avatar, event, property_list, stat, timeline};
+pub use drawer::{Drawer, drawer};
+pub use disclosure::{Accordion, AccordionSection, accordion, accordion_section};
+pub use feedback::{Alert, Skeleton, alert, skeleton, skeleton_text};
+pub use form::{Field, NumberInput, Select, field, number_input, select};
 pub use fx::{
-    afterglow, count_up, decrypt, develop, dissolve, interlace_in, ping, power_on_in, shake, tear, typewriter, unroll_in,
+    afterglow, cascade_in, count_up, decrypt, develop, dissolve, flash, interlace_in, ping, power_on_in, scan, shake,
+    tear, typewriter, unroll_in, wipe_in,
 };
 pub use input::{InputEvent, TextInput};
 pub use list::{ListItem, list_item};
 pub use menu::{Menu, MenuItem, Submenu, context_menu, dropdown_menu, menu_item, submenu};
+pub use nav::{Breadcrumb, Pagination, Sidebar, Steps, Toolbar, breadcrumb, pagination, sidebar, steps, toolbar};
 pub use overlay::{Align, Popover, popover};
 pub use palette::{CommandPalette, PaletteCommand, TogglePalette, command};
 pub use segmented::{Segmented, segmented};

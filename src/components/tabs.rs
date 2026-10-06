@@ -69,7 +69,10 @@ impl Tabs {
 impl RenderOnce for Tabs {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx);
-        let bar = crate::animate::play_on_change("bar", self.selected, crate::motion::BASE, window, cx).eased();
+        // Namespaced by the strip's id: two strips in one view must not share
+        // a clip.
+        let bar_id = ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "bar".into());
+        let bar = crate::animate::play_on_change(bar_id, self.selected, crate::motion::BASE, window, cx).eased();
         let selected = self.selected;
         let seek_id = ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "seek".into());
         let seek = window.use_keyed_state(seek_id, cx, |_, _| Seek { from: selected, last: selected, tabs: Rc::default() });

@@ -169,6 +169,9 @@ mod tests {
             "·",                 // ascii::bar
             "▲▼",                // table sort arrows
             "»×■●↑",             // glyphs used in the examples
+            "…*",                // pagination gap, required-field mark
+            "#%&*+=<>/\\|$@?!",  // decrypt / scramble noise
+            "0123456789.-%",     // number_input, stat, chart readouts
         );
         let missing: String = used.chars().filter(|c| !display_has(*c)).collect();
         assert!(missing.is_empty(), "display face lacks: {missing:?}");

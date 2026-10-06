@@ -29,6 +29,12 @@ raw-window-handle = "0.6"
 # (PITFALLS 41). Merges with the gpui_platform entry above, for macOS builds.
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Linux only: gpui-pre-platform depends on gpui-pre-linux with default
+# features off, so without these there is no display backend and every
+# window opens headless — the app runs and nothing appears (PITFALLS 44).
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["x11", "wayland"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 # Same major as gpui's own windows dependency; used only to opt out of
 # Windows 11's forced rounded corners (see chrome::square_corners).

@@ -19,9 +19,9 @@
 //! that re-renders the calling view once per frame while running. The
 //! effects are plain functions of that progress ([`scramble`], [`type_on`],
 //! [`shake_offset`], [`dissolve_level`], [`develop_level`],
-//! [`interlace_fields`], [`tear_bands`], [`ping_ring`], [`power_on_band`])
-//! and the elements that need paint access ([`Unroll`], [`Nudge`],
-//! [`Interlace`], [`Band`], [`PowerOn`]).
+//! [`interlace_fields`], [`tear_bands`], [`ping_ring`], [`power_on_band`],
+//! [`scan_line`], [`flash_level`]) and the elements that need paint access
+//! ([`Unroll`], [`Wipe`], [`Nudge`], [`Interlace`], [`Band`], [`PowerOn`]).
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
@@ -285,6 +285,24 @@ pub fn power_on_band(p: Progress) -> (f32, f32) {
     if p.t < SPLIT { (snap(p.t / SPLIT), 0.) } else { (1., snap((p.t - SPLIT) / (1. - SPLIT))) }
 }
 
+/// A scan: one amber line passing top to bottom over content that is
+/// already there — "this just refreshed". The line's position as a fraction
+/// of the height, or `None` once it has passed.
+pub fn scan_line(p: Progress) -> Option<f32> {
+    (!p.done).then(|| p.eased())
+}
+
+/// A flash: the element floods with ink, then dissolves back through the
+/// Bayer ramp. Capped at ▓ (75%) so whatever is underneath still reads.
+/// `None` when there's nothing to draw.
+pub fn flash_level(p: Progress) -> Option<f32> {
+    if p.done {
+        return None;
+    }
+    let level = (dissolve_level(p) * crate::dither::level::DARK * 16.).round() / 16.;
+    (level > 0.).then_some(level)
+}
+
 // ── Elements ──────────────────────────────────────────────────────────────
 
 /// Reveals its child top-to-bottom like a CRT drawing a frame: the child is
@@ -348,6 +366,89 @@ impl gpui::Element for Unroll {
         if let Some(edge) = self.edge.filter(|_| self.t < 1.) {
             let y = (bounds.top() + bounds.size.height * self.t - px(1.)).max(bounds.top());
             window.paint_quad(fill(Bounds::new(point(bounds.left(), y), size(bounds.size.width, px(2.))), edge));
+        }
+    }
+}
+
+/// Which edge a [`Wipe`] starts from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Edge {
+    /// Reveal left → right (a sidebar, a drawer from the left).
+    #[default]
+    Left,
+    /// Reveal right → left (a drawer from the right).
+    Right,
+}
+
+/// [`Unroll`] turned on its side: reveals its child from one edge with an
+/// amber scan line on the leading edge. Layout is the child's full size from
+/// the first frame, so nothing around it moves. For side panels and drawers.
+pub struct Wipe {
+    child: AnyElement,
+    t: f32,
+    from: Edge,
+    edge: Option<Hsla>,
+    bleed: Pixels,
+}
+
+pub fn wipe(child: impl IntoElement, t: f32, from: Edge) -> Wipe {
+    Wipe { child: child.into_any_element(), t: t.clamp(0., 1.), from, edge: None, bleed: px(8.) }
+}
+
+impl Wipe {
+    /// Draw the scan line on the clip edge while wiping.
+    pub fn edge(mut self, color: Hsla) -> Self {
+        self.edge = Some(color);
+        self
+    }
+
+    fn visible(&self, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+        let w = (bounds.size.width + self.bleed) * self.t;
+        let h = bounds.size.height + self.bleed;
+        match self.from {
+            Edge::Left => Bounds::new(bounds.origin, size(w, h)),
+            Edge::Right => Bounds::new(point(bounds.right() - w + self.bleed, bounds.top()), size(w, h)),
+        }
+    }
+}
+
+impl IntoElement for Wipe {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl gpui::Element for Wipe {
+    type RequestLayoutState = ();
+    type PrepaintState = Bounds<Pixels>;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, window: &mut Window, cx: &mut App) -> (LayoutId, ()) {
+        (self.child.request_layout(window, cx), ())
+    }
+
+    fn prepaint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
+        let visible = self.visible(bounds);
+        window.with_content_mask(Some(ContentMask { bounds: visible }), |window| self.child.prepaint(window, cx));
+        visible
+    }
+
+    fn paint(&mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), visible: &mut Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        window.with_content_mask(Some(ContentMask { bounds: *visible }), |window| self.child.paint(window, cx));
+        if let Some(edge) = self.edge.filter(|_| self.t < 1.) {
+            let x = match self.from {
+                Edge::Left => (bounds.left() + bounds.size.width * self.t - px(1.)).max(bounds.left()),
+                Edge::Right => (bounds.right() - bounds.size.width * self.t - px(1.)).min(bounds.right() - px(2.)),
+            };
+            window.paint_quad(fill(Bounds::new(point(x, bounds.top()), size(px(2.), bounds.size.height)), edge));
         }
     }
 }
@@ -451,7 +552,7 @@ impl gpui::Element for Interlace {
         let rows = (height / line).ceil() as usize;
         let hidden = |i: usize| {
             let y = i as f32 * line;
-            y >= height * if i % 2 == 0 { self.even } else { self.odd }
+            y >= height * if i.is_multiple_of(2) { self.even } else { self.odd }
         };
         // Cover runs of hidden rows: below both sweeps that is one quad.
         let mut i = 0;
@@ -694,6 +795,22 @@ mod tests {
             }
             assert!(bands.iter().all(|b| b.2.abs() <= 6.));
         }
+    }
+
+    #[test]
+    fn scan_and_flash_end_at_rest() {
+        assert!(scan_line(Progress::DONE).is_none());
+        assert_eq!(scan_line(at(0., 0)), Some(0.));
+        assert!(flash_level(Progress::DONE).is_none());
+        let first = flash_level(at(0., 0)).unwrap();
+        assert!(first <= crate::dither::level::DARK, "a flash never hides what's under it");
+        assert_eq!((first * 16.).fract(), 0., "flash lands on Bayer steps");
+    }
+
+    #[test]
+    fn stagger_is_capped() {
+        assert_eq!(stagger(0), Duration::ZERO);
+        assert_eq!(stagger(8), stagger(100), "a long list still finishes inside the window");
     }
 
     #[test]

@@ -164,7 +164,8 @@ impl RenderOnce for Toggle {
 
 /// A square on/off switch. Off: a dithered `sunken` track with the thumb at
 /// the left. On: an amber track with the thumb at the right. The thumb
-/// jumps — no slide (Ferrite motion is instant or stepped).
+/// *travels* between the two in eased whole-pixel steps (`motion::FAST`),
+/// and the `ON`/`OFF` readout decrypts as it lands.
 #[derive(IntoElement)]
 pub struct Switch {
     id: ElementId,
