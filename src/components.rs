@@ -21,6 +21,7 @@ pub mod menu;
 pub mod nav;
 pub mod overlay;
 pub mod palette;
+pub mod responsive;
 pub mod scroll;
 pub mod segmented;
 pub mod slider;
@@ -55,6 +56,7 @@ pub use menu::{Menu, MenuItem, Submenu, context_menu, dropdown_menu, menu_item, 
 pub use nav::{Breadcrumb, Pagination, Sidebar, Steps, Toolbar, breadcrumb, pagination, sidebar, steps, toolbar};
 pub use overlay::{Align, Popover, popover};
 pub use palette::{CommandPalette, PaletteCommand, TogglePalette, command};
+pub use responsive::{Responsive, responsive, whole_scale};
 pub use segmented::{Segmented, segmented};
 pub use scroll::{ScrollArea, Scrollbar, VirtualList, scroll_area, scrollbar, virtual_list};
 pub use slider::{Slider, slider};

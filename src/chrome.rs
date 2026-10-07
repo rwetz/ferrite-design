@@ -35,7 +35,15 @@ const MAC_TRAFFIC_LIGHT_PAD: Pixels = px(80.);
 ///   disambiguating double-clicks; see PITFALLS).
 /// - Client decorations requested on Linux (the WM may still refuse).
 /// - Opaque background: Ferrite has no glass.
+/// - The initial size is shrunk to fit the primary screen's usable area
+///   (minus a margin), so a window designed at 1040×860 still opens whole
+///   on a 1366×768 laptop or a 1080p screen at 150%. Lay the content out to
+///   cope with that (see [`crate::components::responsive`]).
 pub fn window_options(title: impl Into<SharedString>, initial: Size<Pixels>, cx: &App) -> WindowOptions {
+    let initial = match cx.primary_display() {
+        Some(d) => fit_size(initial, d.visible_bounds().size),
+        None => initial,
+    };
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, initial, cx))),
         titlebar: Some(TitlebarOptions {
@@ -44,7 +52,7 @@ pub fn window_options(title: impl Into<SharedString>, initial: Size<Pixels>, cx:
             traffic_light_position: Some(point(px(10.), px(9.))),
         }),
         app_owns_titlebar_drag: true,
-        window_min_size: Some(size(px(480.), px(320.))),
+        window_min_size: Some(MIN_WINDOW),
         window_decorations: Some(WindowDecorations::Client),
         window_background: WindowBackgroundAppearance::Opaque,
         ..Default::default()
@@ -314,6 +322,7 @@ pub fn powering_off(window: &Window, cx: &App) -> bool {
 /// it switches off (it then closes itself).
 fn close_request(window: &mut Window, cx: &mut App) -> bool {
     let id = window.window_handle().window_id();
+    save_remembered(window, cx);
     if crate::motion::reduced(cx) || !cx.try_global::<PowerOff>().is_some_and(|p| p.enabled.contains(&id)) {
         return true;
     }
@@ -333,6 +342,176 @@ fn close_request(window: &mut Window, cx: &mut App) -> bool {
         })
         .detach();
     false
+}
+
+// ── Remembered windows ────────────────────────────────────────────────────
+
+/// The smallest window Ferrite opens (also the OS minimum it sets).
+pub const MIN_WINDOW: Size<Pixels> = Size { width: px(480.), height: px(320.) };
+/// Room left around a window opened at a size the screen can't fit.
+const SCREEN_MARGIN: f32 = 48.;
+
+/// `want`, shrunk (never grown) to fit inside `screen` with a margin, and
+/// never below [`MIN_WINDOW`].
+pub fn fit_size(want: Size<Pixels>, screen: Size<Pixels>) -> Size<Pixels> {
+    let fit = |want: Pixels, room: Pixels, min: Pixels| want.min(room - px(SCREEN_MARGIN)).max(min);
+    size(fit(want.width, screen.width, MIN_WINDOW.width), fit(want.height, screen.height, MIN_WINDOW.height))
+}
+
+/// How a window was left: windowed, maximized or fullscreen, and its
+/// (restore) bounds. Stored as one line of text.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Remembered {
+    state: u8,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
+
+impl Remembered {
+    fn of(bounds: WindowBounds) -> Self {
+        let (state, b) = match bounds {
+            WindowBounds::Windowed(b) => (0, b),
+            WindowBounds::Maximized(b) => (1, b),
+            WindowBounds::Fullscreen(b) => (2, b),
+        };
+        Remembered { state, x: b.origin.x.into(), y: b.origin.y.into(), w: b.size.width.into(), h: b.size.height.into() }
+    }
+
+    fn bounds(&self) -> Bounds<Pixels> {
+        Bounds::new(point(px(self.x), px(self.y)), size(px(self.w), px(self.h)))
+    }
+
+    fn window_bounds(&self, bounds: Bounds<Pixels>) -> WindowBounds {
+        match self.state {
+            1 => WindowBounds::Maximized(bounds),
+            2 => WindowBounds::Fullscreen(bounds),
+            _ => WindowBounds::Windowed(bounds),
+        }
+    }
+
+    fn serialize(&self) -> String {
+        let state = ["windowed", "maximized", "fullscreen"][self.state as usize];
+        format!("{state} {:.0} {:.0} {:.0} {:.0}\n", self.x, self.y, self.w, self.h)
+    }
+
+    fn parse(text: &str) -> Option<Self> {
+        let mut it = text.split_whitespace();
+        let state = match it.next()? {
+            "windowed" => 0,
+            "maximized" => 1,
+            "fullscreen" => 2,
+            _ => return None,
+        };
+        let mut n = || it.next()?.parse::<f32>().ok().filter(|v| v.is_finite());
+        let (x, y, w, h) = (n()?, n()?, n()?, n()?);
+        (w > 0. && h > 0.).then_some(Remembered { state, x, y, w, h })
+    }
+
+    /// Where to reopen, given the screens there are now: the saved bounds
+    /// if their middle is on one of them (shrunk to fit it, nudged fully
+    /// onto it), or `None` when the screen they were on is gone.
+    fn place(&self, screens: &[Bounds<Pixels>]) -> Option<Bounds<Pixels>> {
+        let saved = self.bounds();
+        let screen = screens.iter().find(|s| s.contains(&saved.center()))?;
+        let sz = fit_size(saved.size, screen.size + size(px(SCREEN_MARGIN), px(SCREEN_MARGIN)));
+        let x = saved.origin.x.max(screen.origin.x).min(screen.origin.x + screen.size.width - sz.width);
+        let y = saved.origin.y.max(screen.origin.y).min(screen.origin.y + screen.size.height - sz.height);
+        Some(Bounds::new(point(x, y), sz))
+    }
+}
+
+/// The config directory every Ferrite app writes to:
+/// `%APPDATA%\ferrite`, `~/Library/Application Support/ferrite`, or
+/// `$XDG_CONFIG_HOME/ferrite` (`~/.config/ferrite`).
+pub fn config_dir() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let base = if IS_WINDOWS {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else if IS_MAC {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+    };
+    base.map(|b| b.join("ferrite"))
+}
+
+fn remembered_path(key: &str) -> Option<std::path::PathBuf> {
+    config_dir().map(|d| d.join(format!("{key}.window")))
+}
+
+/// [`window_options`] that reopen where the window was last left: same
+/// size, same place, still maximized or fullscreen. `key` names the file
+/// (`<config>/ferrite/<key>.window`); first launch, or when that screen is
+/// gone, falls back to `default` centered. Pair with [`remember_window`].
+///
+/// ```ignore
+/// let options = chrome::remembered_window_options("almanac", "Almanac", size(px(1120.), px(760.)), cx);
+/// cx.open_window(options, |window, cx| {
+///     chrome::remember_window("almanac", window, cx);
+///     …
+/// })
+/// ```
+pub fn remembered_window_options(key: &str, title: impl Into<SharedString>, default: Size<Pixels>, cx: &App) -> WindowOptions {
+    let mut options = window_options(title, default, cx);
+    let saved = remembered_path(key).and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| Remembered::parse(&t));
+    if let Some(saved) = saved {
+        let screens: Vec<_> = cx.displays().iter().map(|d| d.visible_bounds()).collect();
+        if let Some(bounds) = saved.place(&screens) {
+            options.window_bounds = Some(saved.window_bounds(bounds));
+        }
+    }
+    options
+}
+
+#[derive(Default)]
+struct Remembering {
+    keys: std::collections::HashMap<WindowId, &'static str>,
+}
+
+impl gpui::Global for Remembering {}
+
+/// Save this window's size, place and state as it changes, for
+/// [`remembered_window_options`] to reopen it with. Call once from the
+/// `open_window` closure. Checked twice a second, written only when it
+/// changed; closing (with [`power_off_on_close`]) saves at once.
+pub fn remember_window(key: &'static str, window: &mut Window, cx: &mut App) {
+    let id = window.window_handle().window_id();
+    cx.default_global::<Remembering>().keys.insert(id, key);
+    let mut last = window.window_bounds();
+    // Polled rather than observed: gpui only reports resizes to a view's
+    // own `Context`, and this has to work from the open_window closure.
+    window
+        .spawn(cx, async move |cx| {
+            loop {
+                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                let Ok(now) = cx.update(|window, _| window.window_bounds()) else { break };
+                if now != last {
+                    last = now;
+                    if let Some(path) = remembered_path(key) {
+                        write_remembered(&path, Remembered::of(now));
+                    }
+                }
+            }
+        })
+        .detach();
+}
+
+fn save_remembered(window: &Window, cx: &App) {
+    let id = window.window_handle().window_id();
+    let Some(key) = cx.try_global::<Remembering>().and_then(|r| r.keys.get(&id).copied()) else { return };
+    if let Some(path) = remembered_path(key) {
+        write_remembered(&path, Remembered::of(window.window_bounds()));
+    }
+}
+
+fn write_remembered(path: &std::path::Path, r: Remembered) {
+    // Best effort: losing a window size isn't worth an error.
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(path, r.serialize());
 }
 
 // ── Window frame ──────────────────────────────────────────────────────────
@@ -481,6 +660,40 @@ impl RenderOnce for WindowFrame {
 mod tests {
     use super::*;
     use gpui::{ResizeEdge as E, Tiling};
+
+    #[test]
+    fn a_big_default_fits_a_small_screen() {
+        let laptop = size(px(1366.), px(728.));
+        assert_eq!(fit_size(size(px(1040.), px(860.)), laptop), size(px(1040.), px(680.)));
+        // Never grown, never below the minimum.
+        assert_eq!(fit_size(size(px(600.), px(400.)), laptop), size(px(600.), px(400.)));
+        assert_eq!(fit_size(size(px(900.), px(900.)), size(px(400.), px(300.))), MIN_WINDOW);
+    }
+
+    #[test]
+    fn remembered_bounds_round_trip() {
+        let r = Remembered { state: 1, x: -1200., y: 40., w: 1100., h: 700. };
+        assert_eq!(Remembered::parse(&r.serialize()), Some(r));
+        assert_eq!(Remembered::parse("maximized 1 2 3"), None);
+        assert_eq!(Remembered::parse("windowed 0 0 0 10"), None);
+        assert_eq!(Remembered::parse("rolled 0 0 10 10"), None);
+        assert_eq!(Remembered::parse("windowed 0 0 NaN 10"), None);
+    }
+
+    #[test]
+    fn remembered_bounds_land_on_a_screen_that_exists() {
+        let main = Bounds::new(point(px(0.), px(0.)), size(px(1920.), px(1040.)));
+        let left = Bounds::new(point(px(-1280.), px(0.)), size(px(1280.), px(984.)));
+        let on_left = Remembered { state: 0, x: -1200., y: 100., w: 900., h: 700. };
+        assert_eq!(on_left.place(&[main, left]), Some(on_left.bounds()));
+        // Its screen unplugged: fall back to the default.
+        assert_eq!(on_left.place(&[main]), None);
+        // Hanging off the edge, or too big: pulled on and shrunk.
+        let off = Remembered { state: 0, x: 1500., y: 100., w: 800., h: 1800. };
+        let placed = off.place(&[main]).unwrap();
+        assert!(placed.origin.x + placed.size.width <= px(1920.) && placed.origin.y >= px(0.));
+        assert!(placed.size.height <= px(1040.));
+    }
 
     #[test]
     fn edges_and_corners() {
