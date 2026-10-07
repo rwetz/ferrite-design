@@ -301,6 +301,9 @@ Schemes: `ferrite mono graphite slate concrete harbor cyanotype phosphor verdigr
 - **gpui versions must match ferrite-design exactly** (`=0.3.8`), and dev
   builds need `opt-level = 3` for dependencies.
 - Pick a template that's close and delete; don't build a shell from scratch.
+- **Display text wraps or overflows on a 150% Windows screen** → widths
+  around display-face text in cells, not `px` (PITFALLS §51). Check with
+  `GPUI_X11_SCALE_FACTOR=1.5` in the headless recipe.
 - **Fullscreen looks empty / the default window cuts content off.** gpui
   has no zoom, so nothing grows by itself. Give the main region a
   `responsive(..)` and size its content from the room it gets (ASCII art
