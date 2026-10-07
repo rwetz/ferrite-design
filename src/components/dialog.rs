@@ -297,7 +297,7 @@ impl RenderOnce for Dialog {
                         ),
                 ),
             )
-            .with_priority(2),
+            .with_priority(super::overlay::layer::DIALOG),
         )
     }
 }

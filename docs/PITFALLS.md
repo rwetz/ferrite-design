@@ -492,3 +492,15 @@ Ferrite at 3 through `[profile.dev.package."*"]`. If an app's own root view
 is huge, split the busy parts into their own entities so a clip in one
 doesn't re-render the rest, or lower the rate with `motion::set_fps`.
 
+
+## 50. A menu opened inside a drawer paints under it — ✅ handled
+
+gpui collects every `deferred(..)` in a window into one list and paints it
+sorted by `with_priority`, **ignoring nesting**. Menus were priority 1 and
+drawers 2, so a `select` in a settings drawer opened *behind* the drawer:
+the click registered, nothing showed. Every app with a scheme picker in its
+settings drawer had this. All priorities now come from one table,
+`overlay::layer` (drawer < dialog < palette < popup < toast), ordered so
+anything that can open from inside another layer sits above it; a test
+holds the order. A new floating component takes its number from that
+table, never a literal.

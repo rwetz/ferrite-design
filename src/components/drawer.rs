@@ -244,7 +244,7 @@ impl RenderOnce for Drawer {
                         ),
                 ),
             )
-            .with_priority(2),
+            .with_priority(super::overlay::layer::DRAWER),
         )
     }
 }
