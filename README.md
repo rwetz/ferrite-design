@@ -137,6 +137,8 @@ cargo test                                         # palette/dither/input/layout
   revisiting.
 - [COMPONENTS.md](docs/COMPONENTS.md) — every component, by family, and the rules for writing one.
 - [ROADMAP.md](docs/ROADMAP.md) — what "end to end" still needs, in order.
+- [IDEAS.md](docs/IDEAS.md) — apps worth building in Ferrite, and the plan
+  for growing Darkroom into a full dither and ASCII studio.
 - [AGENTS.md](AGENTS.md) — for coding agents (and people): templates by app type, the rules, an
   exact API cheat sheet, verification. Claude Code gets a `ferrite-scaffold` skill.
 
