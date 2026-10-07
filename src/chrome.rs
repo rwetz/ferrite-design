@@ -143,6 +143,9 @@ impl RenderOnce for TitleBar {
                     window.start_window_move();
                 }
             }))
+            // Two drag areas with the caller's children between them. On
+            // Windows a drag area is caption to the OS hit-test, which eats
+            // clicks, so buttons must not sit inside one.
             .child(
                 div()
                     .id("ferrite-title-drag")
@@ -150,9 +153,9 @@ impl RenderOnce for TitleBar {
                     .flex_row()
                     .items_center()
                     .gap_2()
-                    .flex_1()
                     .h_full()
-                    .px_3()
+                    .pl_3()
+                    .pr_2()
                     .window_control_area(WindowControlArea::Drag)
                     .when(IS_LINUX && client_decorated, |this| {
                         this.on_mouse_down(MouseButton::Right, |ev, window, _| window.show_window_menu(ev.position))
@@ -164,9 +167,22 @@ impl RenderOnce for TitleBar {
                             .display(Scale::X1, window)
                             .text_color(hsla(p.fg))
                             .child(crate::animate::scramble(&self.title.to_uppercase(), boot)),
-                    )
-                    .children(self.children)
-                    // The rest of the bar is a quiet dither strip: the grip.
+                    ),
+            )
+            .child(div().flex().flex_row().items_center().gap_2().children(self.children))
+            // The rest of the bar is a quiet dither strip: the grip.
+            .child(
+                div()
+                    .id("ferrite-title-grip")
+                    .flex()
+                    .items_center()
+                    .flex_1()
+                    .h_full()
+                    .px_2()
+                    .window_control_area(WindowControlArea::Drag)
+                    .when(IS_LINUX && client_decorated, |this| {
+                        this.on_mouse_down(MouseButton::Right, |ev, window, _| window.show_window_menu(ev.position))
+                    })
                     .child(
                         dither(dither::flat(dither::level::LIGHT))
                             .ink(hsla(p.line))
