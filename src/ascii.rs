@@ -921,9 +921,74 @@ pub fn picture_art(picture: &crate::dither::Picture, cols: usize, style: ArtStyl
     lines
 }
 
+/// Which ink each character cell of a `cols`×`rows` rendering of `mask`
+/// takes: the most common non-zero index among the mask samples under the
+/// cell, or 0 (the art's own color) when there are none. Masks are
+/// `Picture`s whose raw values are indices, not levels. Cached like
+/// [`picture_art`].
+pub fn cell_inks(mask: &crate::dither::Picture, cols: usize, rows: usize) -> std::rc::Rc<Vec<Vec<u8>>> {
+    let key = (mask.id(), cols, rows);
+    if let Some(hit) = INK_CACHE.with_borrow(|c| c.get(&key).cloned()) {
+        return hit;
+    }
+    let (w, h) = mask.size();
+    // Sample span of cell i of n over a side of `len` samples: at least one.
+    let span = |i: usize, n: usize, len: u32| {
+        let a = (i as u64 * len as u64 / n.max(1) as u64) as u32;
+        let b = (((i + 1) as u64 * len as u64).div_ceil(n.max(1) as u64) as u32).clamp(a + 1, len.max(1));
+        a.min(len.saturating_sub(1))..b
+    };
+    let inks: Vec<Vec<u8>> = (0..rows)
+        .map(|r| {
+            (0..cols)
+                .map(|c| {
+                    let mut counts = [0u32; 256];
+                    for y in span(r, rows, h) {
+                        for x in span(c, cols, w) {
+                            counts[mask.raw(x, y) as usize] += 1;
+                        }
+                    }
+                    // Ties go to the higher index: the thing drawn on top.
+                    (1..256).rev().max_by_key(|&i| counts[i]).filter(|&i| counts[i] > 0).unwrap_or(0) as u8
+                })
+                .collect()
+        })
+        .collect();
+    let inks = std::rc::Rc::new(inks);
+    INK_CACHE.with_borrow_mut(|c| {
+        if c.len() >= 256 {
+            c.clear();
+        }
+        c.insert(key, inks.clone());
+    });
+    inks
+}
+
+type InkCache = std::collections::HashMap<(u64, usize, usize), std::rc::Rc<Vec<Vec<u8>>>>;
+
+thread_local! {
+    static INK_CACHE: std::cell::RefCell<InkCache> = Default::default();
+}
+
 #[cfg(test)]
 mod art_tests {
     use super::*;
+
+    #[test]
+    fn cells_take_the_ink_most_of_them_is() {
+        // 4×2 mask: left half sky (1), right half ground (2), one stray 3.
+        let mask = crate::dither::Picture::new(4, 2, vec![1, 1, 2, 3, 1, 0, 2, 2]);
+        let inks = cell_inks(&mask, 2, 1);
+        assert_eq!(*inks, vec![vec![1, 2]]);
+        // More cells than samples: every cell still reads one.
+        let inks = cell_inks(&mask, 8, 4);
+        assert_eq!(inks.len(), 4);
+        assert!(inks.iter().all(|row| row.len() == 8));
+        assert_eq!(inks[0][0], 1);
+        assert_eq!(inks[3][7], 2);
+        // Nothing marked: the art's own color.
+        assert_eq!(*cell_inks(&crate::dither::Picture::new(2, 2, vec![0; 4]), 1, 1), vec![vec![0]]);
+    }
 
     #[test]
     fn every_charset_is_real_glyphs() {

@@ -104,6 +104,8 @@ struct Components {
     scenes: Vec<(&'static str, dither::Picture)>,
     art_scene: usize,
     films: [std::rc::Rc<[dither::Picture]>; 3],
+    /// Where the planet's storm is, frame by frame: an `inks` mask.
+    storm: std::rc::Rc<[dither::Picture]>,
     art_fit: usize,
     art_contrast: usize,
     art_invert: bool,
@@ -211,6 +213,7 @@ impl Components {
             ],
             art_scene: 0,
             films: [donut_frames(48).into(), planet_frames(36).into(), wave_frames(24).into()],
+            storm: storm_masks(36).into(),
             art_fit: 0,
             art_contrast: 0,
             art_invert: false,
@@ -1393,8 +1396,15 @@ impl Components {
             )
             .child(
                 ascii_box()
-                    .title("planet · accents")
-                    .child(ascii_film("film-planet", planet).cols(64).charset(ascii::Charset::Accents).contrast(1.4).fps(12)),
+                    .title("planet · accents · inks")
+                    .child(
+                        ascii_film("film-planet", planet)
+                            .cols(64)
+                            .charset(ascii::Charset::Accents)
+                            .contrast(1.4)
+                            .fps(12)
+                            .inks(self.storm.clone(), [hsla(p.warning)]),
+                    ),
             )
             .child(
                 ascii_box()
@@ -2208,6 +2218,30 @@ fn planet_frames(n: usize) -> Vec<dither::Picture> {
                 let storm = if dl * dl * 6. + dt * dt * 40. < 0.12 { 0.35 } else { 0. };
                 ((bands + storm) * (0.15 + 0.85 * light)).clamp(0., 1.)
             })
+        })
+        .collect()
+}
+
+/// `planet_frames`' storm, as an ink mask: 1 where it is, 0 elsewhere.
+fn storm_masks(n: usize) -> Vec<dither::Picture> {
+    (0..n)
+        .map(|f| {
+            let turn = f as f32 / n as f32 * std::f32::consts::TAU;
+            let (w, h) = (240u32, 160u32);
+            let cells = (0..w * h)
+                .map(|i| {
+                    let (u, v) = (((i % w) as f32 + 0.5) / w as f32, ((i / w) as f32 + 0.5) / h as f32);
+                    let (x, y) = ((u - 0.5) * 1.5 / 0.42, (v - 0.5) / 0.42);
+                    let r2 = x * x + y * y;
+                    if r2 >= 1. {
+                        return 0;
+                    }
+                    let z = (1. - r2).sqrt();
+                    let (dl, dt) = ((x.atan2(z) + turn - 1.).sin() * z, y.asin() - 0.35);
+                    u8::from(dl * dl * 6. + dt * dt * 40. < 0.12)
+                })
+                .collect();
+            dither::Picture::new(w, h, cells)
         })
         .collect()
 }

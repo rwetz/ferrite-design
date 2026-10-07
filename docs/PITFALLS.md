@@ -492,3 +492,28 @@ Ferrite at 3 through `[profile.dev.package."*"]`. If an app's own root view
 is huge, split the busy parts into their own entities so a clip in one
 doesn't re-render the rest, or lower the rate with `motion::set_fps`.
 
+
+## 50. A menu opened inside a drawer paints under it — ✅ handled
+
+gpui collects every `deferred(..)` in a window into one list and paints it
+sorted by `with_priority`, **ignoring nesting**. Menus were priority 1 and
+drawers 2, so a `select` in a settings drawer opened *behind* the drawer:
+the click registered, nothing showed. Every app with a scheme picker in its
+settings drawer had this. All priorities now come from one table,
+`overlay::layer` (drawer < dialog < palette < popup < toast), ordered so
+anything that can open from inside another layer sits above it; a test
+holds the order. A new floating component takes its number from that
+table, never a literal.
+
+## 51. Fixed `px` widths around display-face text break at 125–150%
+
+The display face snaps to whole device pixels (`display_size`), so one
+cell is 8 logical px at 100% but ~10.7 at 150%: text in it is up to a
+third wider than it was designed at, while `px(..)` widths and window
+sizes stay put. Barometer's 84px label column wrapped "PRESSURE" onto
+two lines; Terrarium's 1000px window squeezed the jar box under its
+fixed-width grid. Size anything that holds display text in cells
+(`display_size(Scale::X1, window) / 2. * n`), give fixed-width text
+`flex_none()` so flex can't squash it, size default windows for 150%
+(`window_options` shrinks them to fit the screen), and look at it with
+`GPUI_X11_SCALE_FACTOR=1.5` under Xvfb.

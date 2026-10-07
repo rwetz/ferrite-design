@@ -141,6 +141,26 @@ pub enum Align {
     End,
 }
 
+/// Paint order of every floating layer. gpui sorts *all* deferred draws in
+/// a window by this one number, whatever is nested in what — so a menu
+/// opened from inside a drawer is painted at the menu's number, not above
+/// its drawer. Anything that can open *from inside* another layer must sit
+/// above it: a select in a settings drawer, a date picker in a dialog.
+/// (Before this table, menus were 1 and drawers 2: every select in a drawer
+/// opened underneath it, invisible.)
+pub(crate) mod layer {
+    /// Side panels.
+    pub const DRAWER: usize = 2;
+    /// Confirmations, which can be opened from a drawer.
+    pub const DIALOG: usize = 3;
+    /// The command palette, over anything that's open.
+    pub const PALETTE: usize = 4;
+    /// Menus, selects, popovers, date pickers: they open from anywhere.
+    pub const POPUP: usize = 5;
+    /// Toasts report on everything, so they sit on top of everything.
+    pub const TOAST: usize = 6;
+}
+
 /// Place `content` floating below the element this is a child of. The
 /// caller must be `relative()`.
 pub(crate) fn below(align: Align, content: impl IntoElement) -> impl IntoElement {
@@ -163,13 +183,13 @@ pub(crate) fn below(align: Align, content: impl IntoElement) -> impl IntoElement
                     .snap_to_window_with_margin(px(8.))
                     .child(content),
             )
-            .with_priority(1),
+            .with_priority(layer::POPUP),
         )
 }
 
 /// Place `content` floating at a window position (context menus).
 pub(crate) fn at_point(position: Point<Pixels>, content: impl IntoElement) -> impl IntoElement {
-    deferred(anchored().position(position).snap_to_window_with_margin(px(8.)).child(content)).with_priority(1)
+    deferred(anchored().position(position).snap_to_window_with_margin(px(8.)).child(content)).with_priority(layer::POPUP)
 }
 
 // ── Popover ───────────────────────────────────────────────────────────────
@@ -312,5 +332,17 @@ impl RenderOnce for Popover {
             root = root.child(below(self.align, panel));
         }
         root
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::layer::*;
+
+    #[test]
+    fn layers_stack_in_the_order_things_open_from() {
+        // Each opens from inside the one before it, so must paint above it.
+        let order = [DRAWER, DIALOG, PALETTE, POPUP, TOAST];
+        assert!(order.windows(2).all(|w| w[0] < w[1]), "{order:?}");
     }
 }
