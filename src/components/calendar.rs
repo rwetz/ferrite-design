@@ -12,8 +12,8 @@
 //!
 //! No date-library dependency: Gregorian arithmetic only (days from the
 //! civil epoch, Howard Hinnant's algorithms), which is all a picker needs.
-//! Time zones are the app's business; [`Date::today`] reads the system clock
-//! as UTC.
+//! [`Date::today`] is the date in the system's local time zone; anything
+//! finer about time zones is the app's business.
 //!
 //! Keyboard (calendar focused): arrows move the selection by a day or a
 //! week, PageUp/PageDown by a month, Home/End to the month's ends. The shown
@@ -33,6 +33,52 @@ use crate::theme::palette;
 use crate::tokens::{hsla, text};
 
 // ── Date ──────────────────────────────────────────────────────────────────
+
+/// Days since 1970-01-01 on the local calendar at `unix_secs`, in a zone
+/// `offset_secs` east of UTC.
+fn days_at(unix_secs: i64, offset_secs: i64) -> i64 {
+    (unix_secs + offset_secs).div_euclid(86_400)
+}
+
+/// The zone offset implied by a local and a UTC reading of the same moment,
+/// each as (date, seconds into the day). The two readings can straddle a
+/// second, so the result is rounded to the nearest quarter hour, the
+/// granularity of every real zone.
+fn offset_between(local: (Date, i64), utc: (Date, i64)) -> i64 {
+    let at = |(date, secs): (Date, i64)| date.days() * 86_400 + secs;
+    let raw = at(local) - at(utc);
+    (raw as f64 / 900.).round() as i64 * 900
+}
+
+/// The local zone's offset from UTC in seconds (east positive) at `unix_secs`,
+/// daylight saving included; 0 if the system can't say.
+#[cfg(windows)]
+fn local_offset(_unix_secs: i64) -> i64 {
+    use windows::Win32::Foundation::SYSTEMTIME;
+    use windows::Win32::System::SystemInformation::{GetLocalTime, GetSystemTime};
+    // SAFETY: both calls just read the clock.
+    let (local, utc) = unsafe { (GetLocalTime(), GetSystemTime()) };
+    let reading = |t: SYSTEMTIME| {
+        (Date { year: t.wYear as i32, month: t.wMonth as u32, day: t.wDay as u32 }, t.wHour as i64 * 3600 + t.wMinute as i64 * 60 + t.wSecond as i64)
+    };
+    offset_between(reading(local), reading(utc))
+}
+
+#[cfg(unix)]
+fn local_offset(unix_secs: i64) -> i64 {
+    let t = unix_secs as libc::time_t;
+    // SAFETY: localtime_r only writes the `tm` it's given, and is thread-safe.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+        return 0;
+    }
+    tm.tm_gmtoff as i64
+}
+
+#[cfg(not(any(windows, unix)))]
+fn local_offset(_unix_secs: i64) -> i64 {
+    0
+}
 
 /// A calendar date (proleptic Gregorian). Ordered, hashable, `Copy`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,10 +101,10 @@ impl Date {
         Date { year, month, day: day.clamp(1, days_in_month(year, month)) }
     }
 
-    /// Today, from the system clock (UTC).
+    /// Today in the system's local time zone.
     pub fn today() -> Self {
-        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        Date::from_days((secs / 86_400) as i64)
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        Date::from_days(days_at(secs, local_offset(secs)))
     }
 
     /// Days since 1970-01-01.
@@ -588,5 +634,32 @@ mod tests {
     #[test]
     fn iso_is_zero_padded() {
         assert_eq!(Date::new(2026, 3, 7).iso(), "2026-03-07");
+    }
+
+    /// Unix seconds for a UTC date and time.
+    fn utc(date: Date, h: i64, m: i64) -> i64 {
+        date.days() * 86_400 + h * 3600 + m * 60
+    }
+
+    #[test]
+    fn today_is_the_local_date() {
+        let (oct6, oct7) = (Date::new(2026, 10, 6), Date::new(2026, 10, 7));
+        // 20:00 on the 6th in UTC-5 is already 01:00 on the 7th in UTC.
+        assert_eq!(Date::from_days(days_at(utc(oct7, 1, 0), -5 * 3600)), oct6);
+        // 03:00 on the 7th in UTC+9 is still 18:00 on the 6th in UTC.
+        assert_eq!(Date::from_days(days_at(utc(oct6, 18, 0), 9 * 3600)), oct7);
+        // At UTC it's plain division, including before the epoch.
+        assert_eq!(days_at(utc(oct6, 12, 0), 0), oct6.days());
+        assert_eq!(Date::from_days(days_at(-1, 0)), Date::new(1969, 12, 31));
+    }
+
+    #[test]
+    fn offsets_round_to_the_quarter_hour() {
+        let d = Date::new(2026, 10, 6);
+        // 19:59:59 in UTC-5, read a second before UTC ticks over to 01:00:00.
+        assert_eq!(offset_between((d, 19 * 3600 + 59 * 60 + 59), (d.add_days(1), 3600)), -5 * 3600);
+        // Nepal, UTC+5:45.
+        assert_eq!(offset_between((d, 5 * 3600 + 45 * 60), (d, 0)), 5 * 3600 + 45 * 60);
+        assert_eq!(offset_between((d, 3600), (d, 3600)), 0);
     }
 }

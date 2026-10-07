@@ -36,9 +36,14 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = 
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["x11", "wayland"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# Same major as gpui's own windows dependency; used only to opt out of
-# Windows 11's forced rounded corners (see chrome::square_corners).
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
+# Same major as gpui's own windows dependency; used to opt out of Windows
+# 11's forced rounded corners (see chrome::square_corners) and to read the
+# local time zone for Date::today.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_SystemInformation"] }
+
+[target.'cfg(unix)'.dependencies]
+# Already in gpui's tree; localtime_r gives Date::today the local time zone.
+libc = "0.2"
 
 # gpui is unusably slow unoptimised. Optimise every
 # dependency even in dev builds; our own crate stays debuggable.

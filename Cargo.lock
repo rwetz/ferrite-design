@@ -1566,6 +1566,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "libc",
  "raw-window-handle",
  "unicode-segmentation",
  "windows 0.62.2",
