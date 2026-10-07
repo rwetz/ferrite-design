@@ -242,6 +242,7 @@ banner(id, "FERRITE").shadow()    ascii_art(picture).cols(48).ramp(&ascii::BUBBL
 ascii_art(picture).cols(120).charset(ascii::Charset::Full).fit(ascii::Fit::Shape).contrast(1.5).invert(false).diffuse(false)
 // Charset: Classic Punctuation Slashes Lines Accents Letters Digits Binary Greek Box Blocks Symbols Full (best character)
 ascii_film(id, frames /* Rc<[Picture]> or Vec */).cols(64).charset(ascii::Charset::Full).fps(12)   // looping ASCII animation, splash/idle only
+    .inks(masks, [hsla(p.warning), hsla(p.success)])   // colour parts: mask value k (Picture::new of indices) paints with inks[k-1]
 ascii_box().style(ascii::DOUBLE_H).shadow().draw_on(id, key)      // styles: SINGLE DOUBLE DOUBLE_H DOUBLE_V PLAIN
 ascii_table().header(["name", "pid"]).row(["cargo", "9021"]).selected(Some(0))    ascii_tree().item(0, "src/").item(1, "lib.rs")
 ascii_plot(values).size(48, 8).format(|v| format!("{v:.0}MS"))    ascii_bars().bar("mon", 12.).cells(24)    ascii_cal(2026, 10).today(Some(6))
