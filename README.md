@@ -158,3 +158,13 @@ Code: [Apache-2.0](LICENSE), matching the rest of the family.
 Fonts (embedded, unmodified) keep their own licenses — see [NOTICE](NOTICE):
 PxPlus IBM VGA 8×16 by VileR (CC BY-SA 4.0, int10h.org) and JetBrains Mono
 (OFL-1.1).
+
+## Automatic releases
+
+Every push to `main` runs the release workflow. It chooses the next available
+patch version (or honors a higher version set in `Cargo.toml`), creates a release
+commit with matching `Cargo.toml` and `Cargo.lock` versions, and tags that commit.
+Release commits stay off `main`, so the workflow cannot create a push loop.
+Builds and tests must succeed before publication. Rerunning a workflow reuses
+its tag. Manual `vMAJOR.MINOR.PATCH` tags still work when they match the package
+version. Push feature branches normally; they do not publish releases.
