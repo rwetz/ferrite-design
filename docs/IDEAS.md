@@ -27,8 +27,10 @@ Development scaffolds now live beside this checkout:
 | **Folio** (`ferrite-folio`) | Gutendex / Project Gutenberg | Search and paged plain-text reading |
 | **Apogee** (`ferrite-apogee`) | NASA APOD | Daily metadata and dithered image preview; external video link |
 
-These are local scaffolds, not released applications. They use the sibling
-ferrite-design checkout until a library revision is published.
+Each scaffold has a public `rwetz/ferrite-*` repository and a v0.1.0 Windows
+release discoverable by Lodestone. They pin a published ferrite-design Git
+revision. These initial releases cover the slices above; the additional
+features below remain queued.
 
 Next shared priorities:
 
