@@ -163,13 +163,13 @@ pub(crate) fn below(align: Align, content: impl IntoElement) -> impl IntoElement
                     .snap_to_window_with_margin(px(8.))
                     .child(content),
             )
-            .with_priority(1),
+            .with_priority(4),
         )
 }
 
 /// Place `content` floating at a window position (context menus).
 pub(crate) fn at_point(position: Point<Pixels>, content: impl IntoElement) -> impl IntoElement {
-    deferred(anchored().position(position).snap_to_window_with_margin(px(8.)).child(content)).with_priority(1)
+    deferred(anchored().position(position).snap_to_window_with_margin(px(8.)).child(content)).with_priority(4)
 }
 
 // ── Popover ───────────────────────────────────────────────────────────────

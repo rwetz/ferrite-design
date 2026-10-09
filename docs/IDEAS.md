@@ -16,6 +16,45 @@ Existing family, so nothing here duplicates it: Almanac (clock), Barometer
 (weather), Darkroom (dither studio), Lodestone (launcher), Terrarium
 (garden), Wireless (radio).
 
+
+## API apps and shared infrastructure, 2026-10-09
+
+Development scaffolds now live beside this checkout:
+
+| App | Integration | Current slice |
+|---|---|---|
+| **Gambit** (`ferrite-gambit`) | Lichess TV | Anonymous NDJSON stream, text-mode board, players and clocks |
+| **Folio** (`ferrite-folio`) | Gutendex / Project Gutenberg | Search and paged plain-text reading |
+| **Apogee** (`ferrite-apogee`) | NASA APOD | Daily metadata and dithered image preview; external video link |
+
+These are local scaffolds, not released applications. They use the sibling
+ferrite-design checkout until a library revision is published.
+
+Next shared priorities:
+
+1. **Shared settings store.** Pick a scheme once and all running Ferrite apps
+   follow a shared file through a watcher. This should replace Lodestone's
+   launch-only environment handoff. Define explicit per-app overrides, atomic
+   writes, invalid-file handling, and watcher-loop prevention before migration.
+2. **Ferrite Snap.** A usable visual regression app: gallery pages × schemes,
+   side-by-side baselines and candidates, with accent-colour differences.
+   Stable capture sizes and deterministic motion matter before pixel comparison.
+3. **Pinned panels.** Frameless, always-on-top clock, CPU and now-playing windows,
+   with a way to move, unpin and close each panel.
+
+Additional integration queue:
+
+| Integration | Ferrite direction |
+|---|---|
+| Radio Browser | Wireless station search and station validation |
+| NOAA space weather | Kp / aurora gauge, or an Almanac line |
+| USGS earthquake feeds | Live quake list and seismic activity view |
+| Open-Meteo air quality | Air quality and pollen gauges in Barometer |
+| Wikipedia On this day | Almanac ticker items with source links |
+| NASA APOD | Apogee date browsing and Darkroom handoff |
+| Lichess | Gambit channel selection and pinned live boards |
+| Gutenberg | Folio cache, bookmarks and reading-position persistence |
+
 ## At a glance
 
 | # | App | One line | Template | Size |
