@@ -46,6 +46,7 @@ impl Render for V {
             .child(table("tb").column(column("Name").sortable()).column(column("CPU").width(px(80.)).align_right().sortable()).rows(rows_of_strings).sort(Some((0, SortDir::Asc))).selected(Some(i)).on_sort(|_, _, _| {}).on_select(|_, _, _| {}))
             .child(virtual_list("vl", 10, move |range, _window, _cx| range.map(|i| div().child(format!("{i}")).into_any_element()).collect()).size_full())
             .child(scroll_area("sa").flex_1().min_h_0().child(div())).child(split("sp").initial(0.25).min(px(180.)).first(div()).second(div()))
+            .child(responsive("rs", |room, _, _| div().w(room.width / whole_scale(room, gpui::size(px(400.), px(100.)), 4) as f32).into_any_element()).flex_1())
             .child(property_list().row("pid", "4412").row_with("state", tag("run").accent()))
             .child(stat("st", "Requests", "18.2K").delta(4.2).lower_is_better().trend(values.clone()).caption("vs last week"))
             .child(avatar("Ada Lovelace").initials().size(px(32.)).presence(Presence::Online))

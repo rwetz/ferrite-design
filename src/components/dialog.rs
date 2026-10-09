@@ -210,13 +210,18 @@ impl RenderOnce for Dialog {
             .when_some(self.description, |el, d| el.child(div().body(text::BASE).text_color(hsla(p.fg_dim)).child(d)))
             .children(self.children);
 
+        // Wraps rather than overflowing: with long labels, or the display
+        // face at 150%, two buttons can be wider than the dialog, and a
+        // right-aligned row would push the first one out past its left edge.
         let footer = div()
             .flex()
             .flex_row()
+            .flex_wrap()
             .items_center()
             .justify_end()
             .gap_2()
-            .h(px(48.))
+            .min_h(px(48.))
+            .py(px(8.))
             .px_3()
             .bg(hsla(p.surface))
             .border_t_1()
@@ -297,7 +302,7 @@ impl RenderOnce for Dialog {
                         ),
                 ),
             )
-            .with_priority(2),
+            .with_priority(super::overlay::layer::DIALOG),
         )
     }
 }

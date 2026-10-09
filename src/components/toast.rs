@@ -452,7 +452,7 @@ impl Render for Toaster {
         // Shadow is drawn 4px right/down of each card; leave room for it.
         let corner = point(viewport.width - px(16.), viewport.height - self.bottom);
         deferred(anchored().anchor(gpui::Anchor::BottomRight).position(corner).child(stack))
-            .with_priority(3)
+            .with_priority(super::overlay::layer::TOAST)
             .into_any_element()
     }
 }

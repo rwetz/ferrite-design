@@ -219,6 +219,13 @@ impl Picture {
         (self.w, self.h)
     }
 
+    /// The raw stored value at sample `x`, `y` (no filtering) — for
+    /// pictures used as maps of indices rather than levels, like an
+    /// `ascii_film` ink mask.
+    pub fn raw(&self, x: u32, y: u32) -> u8 {
+        self.levels[(y.min(self.h - 1) * self.w + x.min(self.w - 1)) as usize]
+    }
+
     /// The level (0 = paper, 1 = ink) at normalised `u`, `v`, bilinear —
     /// for rendering a picture some other way, e.g. as ASCII art.
     pub fn sample(&self, u: f32, v: f32) -> f32 {

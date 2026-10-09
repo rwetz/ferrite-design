@@ -50,9 +50,11 @@
 //!         theme::apply_env(cx);                 // FERRITE_SCHEME / _APPEARANCE / _FPS dev overrides
 //!         // theme::set_scheme(schemes::by_key("harbor").unwrap(), cx);   // or pick a scheme in code
 //!         cx.bind_keys([gpui::KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
-//!         let options = chrome::window_options("My App", size(px(1200.), px(800.)), cx);
+//!         // Reopens at the size, place and state it was closed in; the default is shrunk to fit the screen.
+//!         let options = chrome::remembered_window_options("my-app", "My App", size(px(1200.), px(800.)), cx);
 //!         cx.open_window(options, |window, cx| {
 //!             chrome::square_corners(window);
+//!             chrome::remember_window("my-app", window, cx);
 //!             chrome::power_off_on_close(window, cx);
 //!             cx.new(|cx| MyApp::new(window, cx))
 //!         }).unwrap();

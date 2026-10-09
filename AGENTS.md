@@ -150,9 +150,11 @@ fn main() {
         theme::apply_env(cx);                 // FERRITE_SCHEME / _APPEARANCE / _FPS dev overrides
         // theme::set_scheme(schemes::by_key("harbor").unwrap(), cx);   // or pick a scheme in code
         cx.bind_keys([gpui::KeyBinding::new("ctrl-shift-p", TogglePalette, None)]);
-        let options = chrome::window_options("My App", size(px(1200.), px(800.)), cx);
+        // Reopens at the size, place and state it was closed in; the default is shrunk to fit the screen.
+        let options = chrome::remembered_window_options("my-app", "My App", size(px(1200.), px(800.)), cx);
         cx.open_window(options, |window, cx| {
             chrome::square_corners(window);
+            chrome::remember_window("my-app", window, cx);
             chrome::power_off_on_close(window, cx);
             cx.new(|cx| MyApp::new(window, cx))
         }).unwrap();
@@ -220,6 +222,8 @@ table(id).column(column("Name").sortable()).column(column("CPU").width(px(80.)).
     .rows(rows_of_strings).sort(Some((col, SortDir::Asc))).selected(Some(i)).on_sort(..).on_select(..)
 virtual_list(id, count, move |range, window, cx| range.map(|i| row(i).into_any_element()).collect()).size_full()
 scroll_area(id).flex_1().min_h_0().child(..)          split(id).initial(0.25).min(px(180.)).first(a).second(b)
+responsive(id, |room, window, cx| el.into_any_element()).flex_1()   // content built for its measured size (fill a fullscreen window)
+whole_scale(room, natural_size, max)   // largest crisp integer multiple that fits: pixel art, block digits, X1/X2/X3 type
 property_list().row("pid", "4412").row_with("state", tag("run").accent())
 stat(id, "Requests", "18.2K").delta(4.2).lower_is_better().trend(values).caption("vs last week")
 avatar("Ada Lovelace").initials().size(px(32.)).presence(Presence::Online)
@@ -238,6 +242,7 @@ banner(id, "FERRITE").shadow()    ascii_art(picture).cols(48).ramp(&ascii::BUBBL
 ascii_art(picture).cols(120).charset(ascii::Charset::Full).fit(ascii::Fit::Shape).contrast(1.5).invert(false).diffuse(false)
 // Charset: Classic Punctuation Slashes Lines Accents Letters Digits Binary Greek Box Blocks Symbols Full (best character)
 ascii_film(id, frames /* Rc<[Picture]> or Vec */).cols(64).charset(ascii::Charset::Full).fps(12)   // looping ASCII animation, splash/idle only
+    .inks(masks, [hsla(p.warning), hsla(p.success)])   // colour parts: mask value k (Picture::new of indices) paints with inks[k-1]
 ascii_box().style(ascii::DOUBLE_H).shadow().draw_on(id, key)      // styles: SINGLE DOUBLE DOUBLE_H DOUBLE_V PLAIN
 ascii_table().header(["name", "pid"]).row(["cargo", "9021"]).selected(Some(0))    ascii_tree().item(0, "src/").item(1, "lib.rs")
 ascii_plot(values).size(48, 8).format(|v| format!("{v:.0}MS"))    ascii_bars().bar("mon", 12.).cells(24)    ascii_cal(2026, 10).today(Some(6))
@@ -296,6 +301,16 @@ Schemes: `ferrite mono graphite slate concrete harbor cyanotype phosphor verdigr
 - **gpui versions must match ferrite-design exactly** (`=0.3.8`), and dev
   builds need `opt-level = 3` for dependencies.
 - Pick a template that's close and delete; don't build a shell from scratch.
+- **Display text wraps or overflows on a 150% Windows screen** → widths
+  around display-face text in cells, not `px` (PITFALLS §51). Check with
+  `GPUI_X11_SCALE_FACTOR=1.5` in the headless recipe.
+- **Fullscreen looks empty / the default window cuts content off.** gpui
+  has no zoom, so nothing grows by itself. Give the main region a
+  `responsive(..)` and size its content from the room it gets (ASCII art
+  `cols` from width, block digits by `whole_scale`, `Scale::X2` type when
+  there's room); keep side panels fixed. Test at the default size, at
+  1366×768, and maximized on 1920×1080. Open windows with
+  `remembered_window_options` + `remember_window`.
 
 ---
 

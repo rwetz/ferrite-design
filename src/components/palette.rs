@@ -480,7 +480,7 @@ impl Render for CommandPalette {
                     ),
             ),
         )
-        .with_priority(2))
+        .with_priority(super::overlay::layer::PALETTE))
         .into_any_element()
     }
 }

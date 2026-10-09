@@ -29,9 +29,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Bounds, ClickEvent, ContentMask, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton,
+    AnyElement, App, Bounds, ClickEvent, ContentMask, ElementId, HighlightStyle, Hsla, InteractiveElement, IntoElement, MouseButton,
     ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, TextAlign,
-    TextRun, Window, canvas, div, font, point, prelude::FluentBuilder as _, px, size,
+    StyledText, TextRun, Window, canvas, div, font, point, prelude::FluentBuilder as _, px, size,
 };
 
 use crate::ascii::{self, BoxStyle};
@@ -1147,12 +1147,24 @@ pub struct AsciiFilm {
     fit: Option<ascii::Fit>,
     fps: u32,
     color: Option<Hsla>,
+    masks: Rc<[Picture]>,
+    inks: Vec<Hsla>,
 }
 
 /// Play `frames` in a loop as ASCII art (default: 64 columns, classic
 /// ramp, 12fps).
 pub fn ascii_film(id: impl Into<ElementId>, frames: impl Into<Rc<[Picture]>>) -> AsciiFilm {
-    AsciiFilm { id: id.into(), frames: frames.into(), cols: 64, style: ascii::ArtStyle::default(), fit: None, fps: 12, color: None }
+    AsciiFilm {
+        id: id.into(),
+        frames: frames.into(),
+        cols: 64,
+        style: ascii::ArtStyle::default(),
+        fit: None,
+        fps: 12,
+        color: None,
+        masks: Rc::from(Vec::new()),
+        inks: Vec::new(),
+    }
 }
 
 impl AsciiFilm {
@@ -1194,6 +1206,18 @@ impl AsciiFilm {
         self.color = Some(color);
         self
     }
+
+    /// Colour parts of the picture: `masks[n]` goes with frame `n` (fewer
+    /// masks than frames repeat), and a mask's raw value at a sample is an
+    /// ink index: 0 keeps the film's own `color`, `k` paints with
+    /// `inks[k - 1]`. Each character cell takes the ink most of it is
+    /// (`ascii::cell_inks`). For illustrations — a sky, a map — not for
+    /// status: take the inks from `palette(cx)` where one fits.
+    pub fn inks(mut self, masks: impl Into<Rc<[Picture]>>, inks: impl IntoIterator<Item = Hsla>) -> Self {
+        self.masks = masks.into();
+        self.inks = inks.into_iter().collect();
+        self
+    }
 }
 
 impl RenderOnce for AsciiFilm {
@@ -1206,18 +1230,55 @@ impl RenderOnce for AsciiFilm {
         let picture = &self.frames[n as usize % self.frames.len()];
         let style = ascii::ArtStyle { fit: self.fit.unwrap_or(self.style.fit), ..self.style };
         let lines = ascii::picture_art(picture, self.cols, style);
+        let cells = (!self.masks.is_empty() && !self.inks.is_empty())
+            .then(|| ascii::cell_inks(&self.masks[n as usize % self.frames.len() % self.masks.len()], self.cols, lines.len()));
+        let inks = self.inks;
         div()
             .flex()
             .flex_col()
             .flex_none()
             .text_color(self.color.unwrap_or_else(|| hsla(p.fg)))
-            .children(lines.iter().map(|l| div().display(Scale::X1, window).whitespace_nowrap().child(l.clone())))
+            .children(lines.iter().enumerate().map(|(r, l)| {
+                let row = div().display(Scale::X1, window).whitespace_nowrap();
+                match cells.as_ref().and_then(|c| c.get(r)) {
+                    Some(cells) => row.child(StyledText::new(l.clone()).with_highlights(ink_runs(l, cells, &inks))),
+                    None => row.child(l.clone()),
+                }
+            }))
     }
+}
+
+/// Byte ranges of `line` to paint in each ink, adjacent cells merged.
+/// Index 0, out-of-range indices and blank cells keep the base color.
+fn ink_runs(line: &str, cells: &[u8], inks: &[Hsla]) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
+    let mut runs: Vec<(std::ops::Range<usize>, u8)> = Vec::new();
+    for (c, (at, ch)) in line.char_indices().enumerate() {
+        let k = cells.get(c).copied().unwrap_or(0);
+        if k == 0 || k as usize > inks.len() || ch == ' ' {
+            continue;
+        }
+        let end = at + ch.len_utf8();
+        match runs.last_mut() {
+            Some((range, last)) if *last == k && range.end == at => range.end = end,
+            _ => runs.push((at..end, k)),
+        }
+    }
+    runs.into_iter().map(|(range, k)| (range, HighlightStyle { color: Some(inks[k as usize - 1]), ..Default::default() })).collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::perimeter;
+    use super::{ink_runs, perimeter};
+
+    #[test]
+    fn ink_runs_merge_and_skip_blanks() {
+        let (a, b) = (gpui::red(), gpui::blue());
+        let runs: Vec<_> = ink_runs("ab cd·e", &[1, 1, 1, 1, 2, 2, 0], &[a, b]).into_iter().map(|(r, h)| (r, h.color)).collect();
+        // The blank breaks the run; '·' is two bytes; index 0 stays plain.
+        assert_eq!(runs, vec![(0..2, Some(a)), (3..4, Some(a)), (4..7, Some(b))]);
+        assert!(ink_runs("ab", &[3, 3], &[a]).is_empty(), "out-of-range ink keeps the base color");
+    }
+
 
     #[test]
     fn draw_on_traces_clockwise() {
