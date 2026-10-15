@@ -39,7 +39,7 @@
 //!             .on_action(cx.listener(|this, _: &TogglePalette, window, cx| this.palette.update(cx, |p, cx| p.toggle(window, cx))))
 //!             .child(self.palette.clone()).child(self.toaster.clone())
 //!             .child(title_bar("My App"))
-//!             .child(div().flex().flex_row().flex_1().min_h_0() /* sidebar + content */)
+//!             .child(div().flex().flex_row().flex_1().min_h_0() /* sidebar + scroll_area(..).fill() content */)
 //!             .child(status_bar().left("READY").right_live(format!("{}FPS", motion::fps())))))
 //!     }
 //! }

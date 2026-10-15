@@ -59,7 +59,7 @@ cannot rot):
 // Release builds are GUI-subsystem on Windows: no console window behind the app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ferrite_design::{Appearance, chrome, components::{power_on_in, status_bar}, palette, tokens::hsla};
+use ferrite_design::{Appearance, chrome, components::{power_on_in, scroll_area, status_bar}, palette, tokens::hsla};
 use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
            Subscription, Window, div, px, size};
 
@@ -75,7 +75,9 @@ impl Render for MyApp {
             .flex().flex_col().size_full()
             .bg(hsla(p.bg)).text_color(hsla(p.fg))
             .child(chrome::title_bar("My App"))
-            .child(div().flex_1().min_h_0() /* your content */)
+            // The body fills a tall window and scrolls in a short one, so
+            // the app resizes properly from the start (AGENTS.md §4).
+            .child(scroll_area("content").flex_1().min_h_0().fill() /* your content */)
             .child(status_bar().left("READY")))
     }
 }
@@ -100,6 +102,24 @@ fn main() {
     });
 }
 ```
+
+## Releasing
+
+The Ferrite apps share one release workflow (`.github/workflows/release.yml`
+and `.github/scripts/prepare_release.py` in any app repo — copy them):
+
+- **Every push to `main` is a release.** The workflow picks the version,
+  commits it to a tag (not to `main`), builds and tests on Windows (and
+  macOS/Linux where the app supports them), and publishes the archives,
+  the Windows setup and `SHA256SUMS.txt`. Lodestone picks the release up.
+- **The version** is the one in `Cargo.toml` if it's newer than every tag,
+  otherwise the newest tag plus one patch. So `Cargo.toml` usually lags
+  the tags; that's expected. For a minor or major release, set the new
+  version in `Cargo.toml` **and** the root package's entry in `Cargo.lock`
+  (the build runs `--locked`, so they must agree).
+- **Pull before you predict a version**: the tags on GitHub may be ahead of
+  your checkout.
+- Add a line to `CHANGELOG.md` under `## [Unreleased]` in the same commit.
 
 ## Step 4 — Structure
 

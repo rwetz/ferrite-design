@@ -6,7 +6,7 @@
 // Release builds are GUI-subsystem on Windows: no console window behind the app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ferrite_design::{Appearance, chrome, components::{power_on_in, status_bar}, palette, tokens::hsla};
+use ferrite_design::{Appearance, chrome, components::{power_on_in, scroll_area, status_bar}, palette, tokens::hsla};
 use gpui::{App, AppContext as _, Context, IntoElement, ParentElement, Render, Styled,
            Subscription, Window, div, px, size};
 
@@ -22,7 +22,9 @@ impl Render for MyApp {
             .flex().flex_col().size_full()
             .bg(hsla(p.bg)).text_color(hsla(p.fg))
             .child(chrome::title_bar("My App"))
-            .child(div().flex_1().min_h_0() /* your content */)
+            // The body fills a tall window and scrolls in a short one, so
+            // the app resizes properly from the start (AGENTS.md §4).
+            .child(scroll_area("content").flex_1().min_h_0().fill() /* your content */)
             .child(status_bar().left("READY")))
     }
 }

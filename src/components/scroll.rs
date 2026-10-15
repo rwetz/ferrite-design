@@ -14,7 +14,11 @@
 //! to jump there.
 //!
 //! - [`scroll_area`]: a vertically scrolling box with a scrollbar. Use for
-//!   anything up to a few thousand elements.
+//!   anything up to a few thousand elements, and for every window body that
+//!   isn't one fixed-size picture: `.fill()` lays the children out in a
+//!   column at least as tall as the window (so `flex_1` children take the
+//!   spare room), `.centered()` also centres them, and either scrolls from
+//!   the top once the window is shorter than the content.
 //! - [`virtual_list`]: renders only the visible rows of a uniform-height
 //!   list (gpui's `uniform_list`), with the same scrollbar. Use for long
 //!   data — logs, file lists, tables of thousands of rows.
@@ -27,7 +31,7 @@ use gpui::{
     AnyElement, App, Bounds, ElementId, HitboxBehavior, InteractiveElement, IntoElement,
     MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement, Pixels, RenderOnce, ScrollHandle,
     StatefulInteractiveElement, StyleRefinement, Styled, UniformListScrollHandle, Window, canvas,
-    div, fill, point, px, size, uniform_list,
+    div, fill, point, prelude::FluentBuilder as _, px, size, uniform_list,
 };
 
 use crate::theme::palette;
@@ -163,15 +167,90 @@ impl RenderOnce for Scrollbar {
 
 /// A vertically scrolling box with a Ferrite scrollbar. Size it like any
 /// element (`.flex_1()`, `.h(px(300.))`); children scroll inside.
+///
+/// For a window body, use `.fill()` or `.centered()` so the content uses a
+/// tall window and scrolls in a short one:
+///
+/// ```ignore
+/// scroll_area("body").flex_1().min_h_0().centered().inset(space::ROW).spacing(space::ROW)
+///     .child(readout)
+///     .child(panel("Scope").flex_1().min_h(px(160.)))   // grows; never below 160
+/// ```
+///
+/// Don't hand-roll this with `justify_center()` on an `overflow_y_scroll()`
+/// box: when the content is taller than the box, centring pushes its top
+/// above the scroll origin, out of reach (PITFALLS §52).
 #[derive(IntoElement)]
 pub struct ScrollArea {
     id: ElementId,
     children: Vec<AnyElement>,
     style: StyleRefinement,
+    layout: Layout,
+    inset: Option<Pixels>,
+    spacing: Option<Pixels>,
+}
+
+/// How a [`ScrollArea`] lays out its children.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Layout {
+    /// As given: the children are the scrolled content.
+    Plain,
+    /// A column at least as tall as the area.
+    Fill,
+    /// A column at least as tall as the area, centred in it.
+    Centered,
 }
 
 pub fn scroll_area(id: impl Into<ElementId>) -> ScrollArea {
-    ScrollArea { id: id.into(), children: Vec::new(), style: StyleRefinement::default() }
+    ScrollArea {
+        id: id.into(),
+        children: Vec::new(),
+        style: StyleRefinement::default(),
+        layout: Layout::Plain,
+        inset: None,
+        spacing: None,
+    }
+}
+
+impl ScrollArea {
+    /// Lay the children out in a column that is at least as tall as the
+    /// area: `flex_1` children share the spare height, and once the content
+    /// is taller than the area it scrolls from the top. Give a growing child
+    /// a `min_h(..)` floor so a short window scrolls instead of crushing it.
+    pub fn fill(mut self) -> Self {
+        self.layout = Layout::Fill;
+        self
+    }
+
+    /// Like [`fill`](Self::fill), and the column is centred vertically when
+    /// it is shorter than the area. Safe at any height: it never centres
+    /// content out of reach.
+    pub fn centered(mut self) -> Self {
+        self.layout = Layout::Centered;
+        self
+    }
+
+    /// Padding inside the scrolled content (with `fill` or `centered`), so
+    /// content scrolls to the window's edge rather than to a margin.
+    pub fn inset(mut self, padding: Pixels) -> Self {
+        self.inset = Some(padding);
+        self.layout = self.layout.max_fill();
+        self
+    }
+
+    /// Space between the children (with `fill` or `centered`).
+    pub fn spacing(mut self, gap: Pixels) -> Self {
+        self.spacing = Some(gap);
+        self.layout = self.layout.max_fill();
+        self
+    }
+}
+
+impl Layout {
+    /// Padding and spacing need the column; asking for them implies `fill`.
+    fn max_fill(self) -> Self {
+        if self == Layout::Plain { Layout::Fill } else { self }
+    }
 }
 
 impl ParentElement for ScrollArea {
@@ -202,7 +281,22 @@ impl RenderOnce for ScrollArea {
                     .track_scroll(&handle)
                     // Room for the bar so it never covers content.
                     .pr(WIDTH)
-                    .children(self.children),
+                    .map(|scroller| match self.layout {
+                        Layout::Plain => scroller.children(self.children),
+                        layout => scroller.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                // At least the area's height (the scroller's
+                                // is definite), so flex_1 children grow; taller
+                                // content just makes the column taller.
+                                .min_h_full()
+                                .when(layout == Layout::Centered, |col| col.justify_center())
+                                .when_some(self.inset, |col, p| col.p(p))
+                                .when_some(self.spacing, |col, g| col.gap(g))
+                                .children(self.children),
+                        ),
+                    }),
             )
             .child(scrollbar("scrollbar", &handle))
     }
@@ -284,6 +378,14 @@ impl RenderOnce for VirtualList {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn padding_and_spacing_imply_a_column() {
+        assert_eq!(scroll_area("a").layout, Layout::Plain);
+        assert_eq!(scroll_area("a").inset(px(8.)).layout, Layout::Fill);
+        assert_eq!(scroll_area("a").centered().spacing(px(8.)).layout, Layout::Centered);
+        assert_eq!(scroll_area("a").spacing(px(8.)).centered().layout, Layout::Centered);
+    }
 
     #[test]
     fn thumb_is_proportional_and_travels_the_track() {

@@ -517,3 +517,52 @@ fixed-width grid. Size anything that holds display text in cells
 `flex_none()` so flex can't squash it, size default windows for 150%
 (`window_options` shrinks them to fit the screen), and look at it with
 `GPUI_X11_SCALE_FACTOR=1.5` under Xvfb.
+
+## 52. `justify_center()` on a scrolling box hides the top — ✅ handled by `scroll_area(..).centered()`
+
+A column with `.overflow_y_scroll().justify_center()` looks right until the
+window is shorter than its content. Then centring splits the overflow both
+ways: half goes below (reachable) and half above the scroll origin, where
+no scroll position can reach it. Wireless lost its frequency readout and
+station name off the top of a quarter-screen window this way, and nothing
+looked wrong at the default size. Centre inside a column that is at least
+as tall as the scroller (`min_h_full`) instead; it grows past the scroller
+when the content is taller, so the overflow is all below. That is what
+`scroll_area(..).centered()` does — don't swap it back for
+`justify_center()`.
+
+## 53. A body that can't scroll, or a region that can shrink to nothing
+
+Two halves of the same bug. A window body that is a plain `div().flex_1()`
+clips whatever doesn't fit, with no way to reach it (Gambit, Resonance,
+Terrarium). And inside a column, a `flex_1().min_h_0()` region holding
+fixed-size content (an `ascii_cal`, a board) is allowed to shrink below its
+content, which then paints over the next sibling: Almanac's month slid
+under its ticker. Make the body a `scroll_area(..).fill()`, and give
+growing regions a `min_h(..)` at the size their content needs, so a short
+window scrolls instead. Prefer `scroll_area` to a raw `overflow_y_scroll()`
+too: gpui draws no scrollbar, so a cropped page with no bar looks finished
+(Aurora, Apogee, Folio).
+
+## 54. Fixed sizes that add up past the window
+
+Each fixed size looks harmless alone; together they set a minimum width
+the window doesn't have. Quarry's 230px folder panel beside a split with
+240px minimums needed 730px; Darkroom's 350px develop panel and 220px tone
+rail left the print a negative width below ~700px; Barometer's heatmap
+beside its day list overflowed a narrow window; Lodestone's 300px tiles
+left a ragged gap and cut descriptions at a fixed 40px. Add up the fixed
+widths in a row and decide what happens below that: `flex_wrap()` with a
+`min_w` per panel, `split(..).vertical()`, a rail that moves or hides,
+`fit_columns` for card grids, and pictures sized with
+`clamp_px(viewport - chrome, lo, hi)` rather than `h(px(480.))`.
+
+## 55. Width maths from `viewport_size()` forgets the gutters
+
+Sizing content from the window ("the dial is as many cells as fit") works
+until something takes width you didn't subtract: side panels, padding, the
+1px window frame, and inside a `scroll_area` the 10px scrollbar gutter
+(`components::scroll::WIDTH`) that the area reserves so the bar never
+covers content. Each one makes the content overflow by exactly that much.
+Subtract them all, clamp the result above zero before dividing by it, and
+floor to whole pixels.

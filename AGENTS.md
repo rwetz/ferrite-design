@@ -101,6 +101,9 @@ Combine templates; every piece below is a component in the prelude.
 8. **Frame regions with `panel("Title")`**, not bordered divs.
 9. Every interactive element gets a **stable, unique `ElementId`**.
 10. Every app exposes its actions in a **`CommandPalette`** (Ctrl+Shift+P).
+11. **Every window resizes.** The body is a `scroll_area(..).fill()` (or
+    `.centered()`), nothing is a fixed `px` size the window can't shrink
+    to, and side-by-side regions wrap or stack when narrow (§4, Resizing).
 
 ---
 
@@ -139,7 +142,7 @@ impl Render for MyApp {
             .on_action(cx.listener(|this, _: &TogglePalette, window, cx| this.palette.update(cx, |p, cx| p.toggle(window, cx))))
             .child(self.palette.clone()).child(self.toaster.clone())
             .child(title_bar("My App"))
-            .child(div().flex().flex_row().flex_1().min_h_0() /* sidebar + content */)
+            .child(div().flex().flex_row().flex_1().min_h_0() /* sidebar + scroll_area(..).fill() content */)
             .child(status_bar().left("READY").right_live(format!("{}FPS", motion::fps())))))
     }
 }
@@ -222,8 +225,13 @@ table(id).column(column("Name").sortable()).column(column("CPU").width(px(80.)).
     .rows(rows_of_strings).sort(Some((col, SortDir::Asc))).selected(Some(i)).on_sort(..).on_select(..)
 virtual_list(id, count, move |range, window, cx| range.map(|i| row(i).into_any_element()).collect()).size_full()
 scroll_area(id).flex_1().min_h_0().child(..)          split(id).initial(0.25).min(px(180.)).first(a).second(b)
+scroll_area(id).flex_1().min_h_0().fill().inset(space::ROW).spacing(space::ROW).child(..)   // a window body: flex_1 children fill a tall window, a short one scrolls
+scroll_area(id).flex_1().min_h_0().centered().child(..)  // ditto, centred when there's room — never centres the top out of reach
+split(id).when(narrow, |s| s.vertical())               // stack the panes on a narrow window
 responsive(id, |room, window, cx| el.into_any_element()).flex_1()   // content built for its measured size (fill a fullscreen window)
 whole_scale(room, natural_size, max)   // largest crisp integer multiple that fits: pixel art, block digits, X1/X2/X3 type
+fit_columns(row, px(280.), space::ROW) // (cols, tile width): a card grid that shares the row evenly
+clamp_px(viewport.height - px(180.), px(200.), px(900.))   // a picture/globe that follows the window within bounds
 property_list().row("pid", "4412").row_with("state", tag("run").accent())
 stat(id, "Requests", "18.2K").delta(4.2).lower_is_better().trend(values).caption("vs last week")
 avatar("Ada Lovelace").initials().size(px(32.)).presence(Presence::Online)
@@ -308,9 +316,53 @@ Schemes: `ferrite mono graphite slate concrete harbor cyanotype phosphor verdigr
   has no zoom, so nothing grows by itself. Give the main region a
   `responsive(..)` and size its content from the room it gets (ASCII art
   `cols` from width, block digits by `whole_scale`, `Scale::X2` type when
-  there's room); keep side panels fixed. Test at the default size, at
-  1366×768, and maximized on 1920×1080. Open windows with
+  there's room); keep side panels fixed. Open windows with
   `remembered_window_options` + `remember_window`.
+
+### Resizing (every app got at least one of these wrong)
+
+Users tile windows. A Ferrite window can be anything from the 480×320
+minimum to a maximized 4K screen; the default size is only one of them.
+All sixteen Ferrite apps clipped somewhere when tiled to a quarter of a
+1080p screen. The fixes, in the order you'll need them:
+
+- **The body scrolls.** Make it `scroll_area("body").flex_1().min_h_0()
+  .fill()`. A plain `div().flex_1()` body clips whatever doesn't fit, with
+  no way to reach it. Prefer `scroll_area` to a raw `.overflow_y_scroll()`:
+  gpui draws no scrollbar, and without one a cropped page looks complete.
+- **Never `justify_center()` a scrolling box.** When the content is taller
+  than the box, centring pushes its top above the scroll origin, out of
+  reach (Wireless lost its frequency readout this way). Use `.centered()`,
+  which centres only when there's room (PITFALLS §52).
+- **Growing regions get a floor.** In a `fill` column, `.flex_1()` takes
+  the spare height; add `.min_h(..)` at the size the content really needs
+  (a calendar's rows, a board at its smallest crisp scale) so a short window
+  scrolls instead of squeezing it under its neighbour. `.min_h_0()` on a
+  region with fixed-size content is how Almanac's month slid under its
+  ticker (PITFALLS §53).
+- **No fixed heights for pictures.** `h(px(480.))` is a screenful on a
+  laptop and a postage stamp maximized. Follow the window within bounds:
+  `.h(clamp_px(viewport.height - px(180.), px(200.), px(900.)))`.
+- **Card grids share the row.** Fixed-width tiles in a `flex_wrap` leave a
+  ragged gap on the right and cut text at fixed heights; size them with
+  `fit_columns(row, min, gap)` and leave room for three lines of text.
+- **Side-by-side regions wrap or stack.** Add `flex_wrap()` to a row of
+  panels (give each a `min_w`), stack a `split` with `.vertical()` below a
+  breakpoint, and move or hide fixed side rails on a narrow window. A fixed
+  230px panel beside a split of two 240px minimums needs 730px before
+  anything else fits (PITFALLS §54).
+- **Width maths includes the gutters.** When you size from
+  `viewport_size()`, subtract every side panel, padding, the window frame
+  and the scrollbar (`components::scroll::WIDTH`, 10px) inside a
+  `scroll_area`, or the content overflows by exactly that much.
+- **Don't let room go negative.** "Window less the panels" is below zero on
+  a narrow window; clamp it (`.max(120.)`) before dividing by it.
+- **Something too wide to fit doesn't centre.** `justify_center` on an item
+  wider than its row cuts it on both sides; centre only when it fits, so it
+  overflows to the right where it can be scrolled or seen.
+- **Look at it tiled.** Check every page at the default size, tiled to a
+  quarter of a 1080p screen (~950×515), at the 480×320 minimum, and
+  maximized. A layout bug is only visible on screen.
 
 ---
 
@@ -318,7 +370,8 @@ Schemes: `ferrite mono graphite slate concrete harbor cyanotype phosphor verdigr
 
 ```bash
 cargo build && cargo clippy --all-targets && cargo test
-cargo run      # look at it: every page, dark and light, one wild scheme
+cargo run      # look at it: every page, dark and light, one wild scheme,
+               # and resized: a quarter of the screen, the 480×320 minimum, maximized
 ```
 
 **Headless (CI, a cloud container):** Ferrite renders under Xvfb with

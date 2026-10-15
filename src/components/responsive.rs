@@ -6,6 +6,9 @@
 //! space. [`responsive`] tells it how much space that is, and
 //! [`whole_scale`] turns that into a crisp integer multiple.
 //!
+//! For grids of cards, [`fit_columns`] shares the row evenly; for a region
+//! that follows the window, [`clamp_px`] keeps it within sane bounds.
+//!
 //! ```ignore
 //! responsive("sky", |room, window, cx| {
 //!     let cols = (f32::from(room.width) / 8.) as usize;   // one display cell = 8px
@@ -78,9 +81,32 @@ pub fn whole_scale(room: Size<Pixels>, natural: Size<Pixels>, max: u32) -> u32 {
     (k.floor() as u32).clamp(1, max.max(1))
 }
 
+/// How many tiles of at least `min` fit across `row` with `gap` between
+/// them, and how wide each is when they share the row evenly. Always at
+/// least one column; a row narrower than `min` gets one tile as wide as the
+/// row. Use for card grids instead of fixed-width tiles in a `flex_wrap`,
+/// which leaves a ragged gap at the right.
+///
+/// `row` is the room the grid really gets: the window less side panels,
+/// padding, and the scrollbar's gutter ([`crate::components::scroll::WIDTH`])
+/// if it sits in a `scroll_area`.
+pub fn fit_columns(row: Pixels, min: Pixels, gap: Pixels) -> (usize, Pixels) {
+    let (row, min, gap) = (f32::from(row).max(0.), f32::from(min).max(1.), f32::from(gap).max(0.));
+    let cols = ((row + gap) / (min + gap)).floor().max(1.);
+    let width = ((row - gap * (cols - 1.)) / cols).floor().max(min.min(row));
+    (cols as usize, gpui::px(width))
+}
+
+/// `size` clamped to `lo..=hi`, in logical pixels: for a region that should
+/// follow the window ("the window's height less the chrome") without
+/// collapsing in a small one or sprawling in a huge one.
+pub fn clamp_px(size: Pixels, lo: Pixels, hi: Pixels) -> Pixels {
+    gpui::px(f32::from(size).clamp(f32::from(lo), f32::from(hi).max(f32::from(lo))))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::whole_scale;
+    use super::{clamp_px, fit_columns, whole_scale};
     use gpui::{px, size};
 
     #[test]
@@ -91,5 +117,22 @@ mod tests {
         assert_eq!(whole_scale(size(px(9000.), px(9000.)), natural, 4), 4); // capped
         assert_eq!(whole_scale(size(px(100.), px(50.)), natural, 4), 1); // never below 1
         assert_eq!(whole_scale(size(px(800.), px(200.)), size(px(0.), px(0.)), 3), 3);
+    }
+
+    #[test]
+    fn columns_share_the_row() {
+        // 3 × 280 + 2 × 16 = 872 fits in 900; the spare 28px is shared.
+        assert_eq!(fit_columns(px(900.), px(280.), px(16.)), (3, px(289.)));
+        assert_eq!(fit_columns(px(871.), px(280.), px(16.)), (2, px(427.)));
+        // Narrower than one tile: one tile, as wide as the row.
+        assert_eq!(fit_columns(px(200.), px(280.), px(16.)), (1, px(200.)));
+        assert_eq!(fit_columns(px(0.), px(280.), px(16.)).0, 1);
+    }
+
+    #[test]
+    fn clamp_px_keeps_to_the_range() {
+        assert_eq!(clamp_px(px(100.), px(240.), px(430.)), px(240.));
+        assert_eq!(clamp_px(px(300.), px(240.), px(430.)), px(300.));
+        assert_eq!(clamp_px(px(900.), px(240.), px(430.)), px(430.));
     }
 }

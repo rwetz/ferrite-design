@@ -106,7 +106,7 @@ with a scheme picker), and whole apps built from them in `examples/app_*.rs`.
 
 | Component | Module | Notes |
 |---|---|---|
-| **`scroll_area` / `scrollbar`** | `scroll` | square thumb on a hairline track; drag or click-to-jump |
+| **`scroll_area` / `scrollbar`** | `scroll` | square thumb on a hairline track; drag or click-to-jump. `.fill()` / `.centered()` (+ `.inset`, `.spacing`) make it a window body that fills a tall window and scrolls in a short one |
 | **`split`** | `split` | draggable 1px divider, fraction state, min sizes, double-click resets |
 | **`TitleBar` / `window_frame`** | `chrome` | self-drawn square chrome on Windows/Linux, native lights on macOS; Linux resize edges |
 | `Panel`, `StatusBar`, `rule`, `progress_bar`, `empty_state` | `components` | framing; status-bar segments decrypt on change, `*_live` segments don't |

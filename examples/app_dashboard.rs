@@ -192,7 +192,7 @@ impl Render for Dashboard {
                 .height(px(180.)),
         );
 
-        let table_panel = panel("Services").meta("click a row for details").flex_1().child(
+        let table_panel = panel("Services").meta("click a row for details").flex_1().min_w(px(360.)).child(
             table("services")
                 .column(column("Service").sortable())
                 .column(column("Req/s").width(px(90.)).align_right().sortable())
@@ -262,7 +262,8 @@ impl Render for Dashboard {
                 .p(space::ROW)
                 .child(tiles)
                 .child(chart)
-                .child(div().flex().flex_row().gap(space::ROW).child(table_panel).child(incidents)),
+                // Incidents sit beside the table, or under it on a narrow window.
+                .child(div().flex().flex_row().flex_wrap().gap(space::ROW).child(table_panel).child(incidents)),
         );
 
         window_frame().child(power_on_in(

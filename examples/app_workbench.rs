@@ -171,6 +171,7 @@ impl Render for Workbench {
         })
         .size_full();
 
+        let roomy = window.viewport_size().width >= px(900.);
         let inspector = div()
             .w(px(260.))
             .flex_none()
@@ -198,7 +199,8 @@ impl Render for Workbench {
                     t.push(toast("Saved").success().message(name.clone()), cx);
                 })
             })))
-            .child(div().flex().flex_row().flex_1().min_h_0().child(div().flex_1().min_w_0().child(unroll_in("doc", &path, code))).child(inspector));
+            // A narrow window drops the inspector so the document keeps its room.
+            .child(div().flex().flex_row().flex_1().min_h_0().child(div().flex_1().min_w_0().child(unroll_in("doc", &path, code))).when(roomy, |row| row.child(inspector)));
 
         window_frame().child(power_on_in(
             "power",

@@ -37,6 +37,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --lib --locked
+      # The app templates are what new apps copy: they must compile.
+      - run: cargo build --examples --locked
   release:
     needs: [prepare, check]
     env:

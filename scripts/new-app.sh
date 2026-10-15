@@ -89,6 +89,11 @@ and the mistakes that cost time). Short version:
 - Colors only through \`palette(cx)\`; no hex values in views.
 - Display type via \`.display(Scale::X1, window)\`, UPPERCASE; body via \`.body(text::BASE)\`.
 - Controlled components: you own the value, the handler gets the new one.
+- Resize properly: the window body is a \`scroll_area(..).fill()\` (or
+  \`.centered()\`), nothing is a fixed \`px\` size that the window can't
+  shrink to, and side-by-side regions wrap or stack when narrow. Look at it
+  tiled to a quarter of the screen and at the 480×320 minimum, not only at
+  the default size (ferrite-design AGENTS.md §4).
 - Check: \`cargo build\`, \`cargo clippy\`, and run it.
 MD
 cp "$dir/AGENTS.md" "$dir/CLAUDE.md"

@@ -136,9 +136,9 @@ impl Wizard {
                 .flex()
                 .flex_col()
                 .items_center()
-                .justify_center()
                 .gap_4()
-                .size_full()
+                .w_full()
+                .py_8()
                 .child(power_on_in("ready", div().px_8().py_4().border_1().border_color(hsla(p.accent)).display(Scale::X3, window).text_color(hsla(p.accent_text)).child("READY.")))
                 .child(
                     property_list()
@@ -212,7 +212,9 @@ impl Render for Wizard {
                         })),
                     ),
                 )
-                .child(div().flex_1().min_h_0().p_6().child(interlace_in("page", step, page)))
+                // window_options shrinks the window to fit a small screen,
+                // and it can't be resized: the page scrolls rather than clip.
+                .child(scroll_area("page").flex_1().min_h_0().child(div().p_6().child(interlace_in("page", step, page))))
                 .child(footer),
         ))
     }
