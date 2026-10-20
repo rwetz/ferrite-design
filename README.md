@@ -115,6 +115,21 @@ gpui_platform::application().run(|cx: &mut App| {
 
 Full walkthrough: [docs/SCAFFOLDING.md](docs/SCAFFOLDING.md).
 
+### Saved preferences and the settings drawer
+
+Apps that want the shared settings (scheme, appearance, refresh rate, row density, saved per app)
+call `prefs::init` in place of `ferrite_design::init`, and mount the drawer from `settings`:
+
+```rust
+ferrite_design::prefs::init(env!("CARGO_PKG_NAME"), cx);       // loads saved settings, then init
+cx.bind_keys([KeyBinding::new("ctrl-,", settings::ToggleSettings, None)]);
+let settings = cx.new(|_| settings::Settings::new());          // keep it in your root view
+// render: settings::button(settings.clone()), and add settings::settings_command(settings) to the palette
+```
+
+Settings are written to `<config dir>/<crate name>-theme.json` through a temp file and a rename, and
+write failures show in the drawer. Pass `--settings` to open it at launch.
+
 ```bash
 scripts/new-app.sh ferrite-pulse dashboard         # a new app from a template
 cargo run --example components                     # every component; scheme picker at the top

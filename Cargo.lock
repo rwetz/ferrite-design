@@ -1568,6 +1568,7 @@ dependencies = [
  "image",
  "libc",
  "raw-window-handle",
+ "serde_json",
  "unicode-segmentation",
  "windows 0.62.2",
 ]
