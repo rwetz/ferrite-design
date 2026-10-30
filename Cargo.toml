@@ -17,6 +17,8 @@ categories = ["gui"]
 gpui = { package = "gpui-pre", version = "=0.3.8" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8" }
 anyhow = "1"
+# Preferences are saved as small JSON files.
+serde_json = "1"
 # Grapheme-aware caret movement in the text input.
 unicode-segmentation = "1"
 # Same major as gpui's; dither rasters are handed to gpui as image::Frame.

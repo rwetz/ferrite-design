@@ -36,9 +36,11 @@ pub mod fuzzy;
 mod glyphs;
 pub mod icon;
 pub mod motion;
+pub mod prefs;
 pub mod prelude;
 mod raster;
 pub mod schemes;
+pub mod settings;
 pub mod theme;
 pub mod tokens;
 
