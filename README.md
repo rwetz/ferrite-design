@@ -1,12 +1,19 @@
-# ferrite-design
+<p align="center">
+  <img src="assets/logo.svg" width="128" height="128" alt="ferrite-design logo: an ordered-dither ramp from iron to amber">
+</p>
 
-```
-▓▒░ FERRITE ░▒▓   phosphor amber on iron grey
-```
+<h1 align="center">ferrite-design</h1>
 
-The design language for the **Ferrite** family of native GPUI desktop apps:
-tokens, theme, pixel display type, ordered-dither and ASCII primitives, square
-window chrome, and the rules that hold them together.
+<p align="center">
+  The design language for the <strong>Ferrite</strong> family of native GPUI desktop apps: tokens, theme, pixel display type, ordered-dither and ASCII primitives, square window chrome, and the rules that hold them together.
+</p>
+
+<p align="center">
+  <a href="https://github.com/rwetz/ferrite-design/actions/workflows/ci.yml"><img src="https://github.com/rwetz/ferrite-design/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/rwetz/ferrite-design/releases/latest"><img src="https://img.shields.io/github/v/release/rwetz/ferrite-design?color=F2A93B&labelColor=18181B" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-3D3D42?labelColor=18181B" alt="License: Apache-2.0"></a>
+</p>
+
 
 ![Ferrite showcase — Iron](docs/img/showcase-iron.png)
 
