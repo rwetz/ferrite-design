@@ -1,0 +1,17 @@
+# Every Ferrite app that depends on ferrite-design. scripts/family.sh reads this.
+ferrite-lodestone
+ferrite-almanac
+ferrite-apogee
+ferrite-aurora
+ferrite-barometer
+ferrite-darkroom
+ferrite-folio
+ferrite-gambit
+ferrite-prism
+ferrite-quarry
+ferrite-relay
+ferrite-resonance
+ferrite-ricochet
+ferrite-snap
+ferrite-terrarium
+ferrite-wireless

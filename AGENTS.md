@@ -406,3 +406,23 @@ visible that way.
   the art rules in `icon.rs` (2px stems, 1px margin) and add it to `ALL`.
 - New scheme → `src/schemes.rs`; it must pass `tokens::tests`.
 - What's next: [docs/ROADMAP.md](docs/ROADMAP.md).
+
+### Carrying a change to every app
+
+Every push to main is tagged `vX.Y.Z` and released. Apps depend on a tag
+(`ferrite-design = { git = "...", tag = "v0.1.4" }`), never on `main`, so
+nothing reaches them by itself. Use `scripts/family.sh` (apps listed in
+`scripts/family.txt`; it opens one PR per app with your `gh` login and never
+merges):
+
+- `scripts/family.sh list`: each app and the tag or rev it is on.
+- `scripts/family.sh bump [vX.Y.Z]`: move every app to a release (default:
+  the newest) and refresh its `Cargo.lock`.
+- `scripts/family.sh run --branch <name> --title <title> -- <command...>`:
+  run a command in a fresh clone of every app and open a PR where it changed
+  something. Use this instead of hand sweeps across 16 repos (README style,
+  AGENTS.md, CI files, brand marks). `$FAMILY_APP` and `$FERRITE_DESIGN`
+  are set for the command.
+
+Add `--apps a,b` to target a few, and `--dry-run` to see the diff stat first.
+A new app goes into `scripts/family.txt`.

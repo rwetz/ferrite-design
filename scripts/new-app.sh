@@ -8,9 +8,10 @@
 #             (default: minimal)
 #   dir       where to create it (default: ../<name>, next to this checkout)
 #
-# The app depends on ferrite-design from git, pinned to the commit this
-# checkout is on (override with FERRITE_REV=<rev>, or FERRITE_PATH=<path>
-# to depend on a local checkout while developing both).
+# The app depends on ferrite-design from git at the release tag this checkout
+# is on (every push to main is tagged), else the commit (override with
+# FERRITE_REV=<rev>, or FERRITE_PATH=<path> to depend on a local checkout
+# while developing both). Add the new app to scripts/family.txt.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,8 +39,13 @@ fi
 if [[ -n "${FERRITE_PATH:-}" ]]; then
   dep="ferrite-design = { path = \"$FERRITE_PATH\" }"
 else
-  rev="${FERRITE_REV:-$(git -C "$here" rev-parse HEAD 2>/dev/null || echo main)}"
-  dep="ferrite-design = { git = \"https://github.com/rwetz/ferrite-design\", rev = \"$rev\" }"
+  tag="$(git -C "$here" describe --tags --exact-match --match 'v*' HEAD 2>/dev/null || true)"
+  if [[ -z "${FERRITE_REV:-}" && -n "$tag" ]]; then
+    dep="ferrite-design = { git = \"https://github.com/rwetz/ferrite-design\", tag = \"$tag\" }"
+  else
+    rev="${FERRITE_REV:-$(git -C "$here" rev-parse HEAD 2>/dev/null || echo main)}"
+    dep="ferrite-design = { git = \"https://github.com/rwetz/ferrite-design\", rev = \"$rev\" }"
+  fi
 fi
 # The display name: ferrite-pulse -> Pulse.
 display="$(echo "${name#ferrite-}" | sed -E 's/[-_]+/ /g; s/(^| )([a-z])/\1\u\2/g')"
